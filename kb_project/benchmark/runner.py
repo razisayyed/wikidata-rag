@@ -20,7 +20,11 @@ from ..prompt_only_llm import (
 from ..settings import OPENAI_JUDGE_MODEL, RAGTRUTH_MODEL
 
 from .models import ComparisonResult, Colors
-from .evaluation import evaluate_response, evaluate_rag_faithfulness
+from .evaluation import (
+    evaluate_response,
+    evaluate_rag_faithfulness,
+    build_primary_context,
+)
 from .ragtruth import RAGTruthEvaluator
 from .aimon import AimonEvaluator
 from .vectra import (
@@ -141,12 +145,10 @@ def test_rag_model(
     # Run agent with verbose=False to suppress detailed output
     run = run_agent_with_capture(test_case.question, agent=rag_agent, verbose=False)
 
-    primary_retrieved_context = run.retrieved_context if eval_context_mode == "combined" else ""
-
     eval_result = evaluate_response(
         response=run.final_answer,
         ground_truth=reference_ground_truth,
-        retrieved_context=primary_retrieved_context,
+        retrieved_context=run.retrieved_context,
         model=hallucination_model,
         threshold=threshold,
         eval_context_mode=eval_context_mode,
@@ -247,8 +249,11 @@ def test_both_models(
         verbose=False,
     )
 
-    rag_primary_retrieved_context = (
-        rag_result["retrieved_context"] if eval_context_mode == "combined" else ""
+    # Calculate reference context for LLM judge and other evaluators based on mode
+    primary_eval_context = build_primary_context(
+        ground_truth=reference_ground_truth,
+        retrieved_context=rag_result["retrieved_context"],
+        eval_context_mode=eval_context_mode,
     )
 
     # Run LLM-as-a-judge evaluation if enabled
@@ -258,6 +263,7 @@ def test_both_models(
             question=test_case.question,
             rag_response=rag_result["response"],
             prompt_only_response=prompt_result["response"],
+            reference_context=primary_eval_context,
             model=OPENAI_JUDGE_MODEL,
             verbose=False,
         )
@@ -272,7 +278,8 @@ def test_both_models(
             question=test_case.question,
             response=rag_result["response"],
             ground_truth=reference_ground_truth,
-            retrieved_context=rag_primary_retrieved_context,
+            retrieved_context=rag_result["retrieved_context"],
+            eval_context_mode=eval_context_mode,
             verbose=False,
         )
 
@@ -282,6 +289,7 @@ def test_both_models(
             response=prompt_result["response"],
             ground_truth=reference_ground_truth,
             retrieved_context="",  # No retrieved context for prompt-only
+            eval_context_mode=eval_context_mode,
             verbose=False,
         )
 
@@ -294,8 +302,9 @@ def test_both_models(
         rag_aimon_result = aimon_evaluator.evaluate_response(
             question=test_case.question,
             ground_truth=reference_ground_truth,
-            retrieved_context=rag_primary_retrieved_context,
+            retrieved_context=rag_result["retrieved_context"],
             response=rag_result["response"],
+            eval_context_mode=eval_context_mode,
         )
 
         # Evaluate Prompt-Only response
@@ -304,6 +313,7 @@ def test_both_models(
             ground_truth=reference_ground_truth,
             retrieved_context="",  # No retrieved context for prompt-only
             response=prompt_result["response"],
+            eval_context_mode=eval_context_mode,
         )
 
     rag_faithfulness_score = None

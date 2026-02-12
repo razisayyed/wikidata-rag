@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from ..settings import AIMON_DEVICE, resolve_device
-
+from .evaluation import build_primary_context
 
 # ==========================================================================
 # Data Structures
@@ -216,6 +216,7 @@ class AimonEvaluator:
         ground_truth: str,
         retrieved_context: str,
         response: str,
+        eval_context_mode: str = "ground_truth",
     ) -> AimonResult:
         """
         Evaluate a response using ground truth and retrieved context.
@@ -227,21 +228,17 @@ class AimonEvaluator:
             ground_truth: Known correct answer.
             retrieved_context: Facts retrieved by RAG (empty for prompt-only).
             response: Model's response to evaluate.
+            eval_context_mode: "ground_truth" (default) or "combined".
 
         Returns:
             AimonResult with hallucination detection results.
         """
-        # Build combined context (similar to other evaluators)
-        if retrieved_context:
-            combined_context = f"""=== GROUND TRUTH ===
-{ground_truth.strip()}
-
-=== RETRIEVED FACTS ===
-{retrieved_context.strip()}
-"""
-        else:
-            # For prompt-only, just use ground truth
-            combined_context = ground_truth.strip()
+        # Build combined context using standard utility
+        combined_context = build_primary_context(
+            ground_truth=ground_truth,
+            retrieved_context=retrieved_context,
+            eval_context_mode=eval_context_mode,
+        )
 
         return self.evaluate(
             prompt=question,

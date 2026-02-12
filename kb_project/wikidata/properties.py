@@ -77,6 +77,7 @@ WIKIDATA_PROPERTIES: Dict[str, str] = {
     "P6886": "writing language",
     "P7937": "form of creative work",
     "P1433": "published in (journal/venue)",
+    "P1476": "title (official name of work)",
     "P921": "main subject",
     "P2093": "author name string",
     # === POLITICIAN/LEADER SPECIFIC ===
@@ -125,6 +126,7 @@ WIKIDATA_PROPERTIES: Dict[str, str] = {
     # === EDUCATIONAL INSTITUTION ===
     "P131": "located in administrative unit",
     "P6375": "street address",
+    "P1476": "title (official name of work)",
     "P1813": "short name",
     "P1449": "nickname",
     "P5124": "Wikimedia outline",
@@ -148,6 +150,7 @@ WIKIDATA_PROPERTIES: Dict[str, str] = {
     "P205": "basin country",
     "P403": "mouth of watercourse",
     "P885": "origin of watercourse",
+    "P2547": "radius (astronomical or physical)",
     "P2043": "length",
     "P4552": "mountain range",
     "P2936": "language used",
@@ -213,6 +216,7 @@ WIKIDATA_PROPERTIES: Dict[str, str] = {
     # === SCIENCE / ACADEMIC ===
     "P61": "discoverer or inventor",
     "P138": "named after",
+    "P397": "parent astronomical body",
     "P575": "time of discovery/invention",
     "P1343": "described by source",
     "P2670": "has part(s) of the class",
@@ -256,6 +260,8 @@ WIKIDATA_PROPERTIES: Dict[str, str] = {
     "P2094": "competition class",
     # === EVENTS ===
     "P585": "point in time (when event occurred)",
+    "P828": "has cause",
+    "P1545": "series ordinal",
     "P580": "start time",
     "P582": "end time",
     "P276": "location",

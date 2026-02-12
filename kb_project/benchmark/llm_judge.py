@@ -101,31 +101,38 @@ NOT HALLUCINATION:
 - Admitting appropriate uncertainty
 
 YOUR TASK:
-Verify facts using your knowledge and determine which response is more factually accurate based on:
-- Accuracy of stated facts
-- Appropriate refusal for unknown/fictional entities
-- Avoidance of fabrication
-- Scope discipline: extra details beyond the asked question are NOT a positive signal
-- Risk awareness: unsupported/scope-bloating extra claims should count as negative behavior and potential hallucination
+Verify facts using a blend of the PROVIDED REFERENCE CONTEXT and YOUR KNOWLEDGE.
+Factual claims in the responses should be cross-referenced against the context when available.
 
-You will evaluate: RAG Response (uses knowledge retrieval) vs Prompt-Only Response (no retrieval)."""
+Hallucination priorities:
+1. Contradictions to the provided Reference Context.
+2. Fabrications of details not mentioned in current context but stated as fact.
+3. Appropriate refusal for unknown/fictional entities.
+4. Scope discipline: extra details beyond the question are risky (potential hallucination).
+
+You will evaluate: RAG Response vs Prompt-Only Response."""
 
 
 def build_judge_prompt(
     question: str,
     rag_response: str,
     prompt_only_response: str,
+    reference_context: str = "",
 ) -> str:
     """
     Build the evaluation prompt for the LLM judge.
 
     The prompt structure is carefully designed:
     1. Clear section headers for each piece of information
-    2. Both responses presented neutrally
-    3. Judge uses its own knowledge to verify facts
+    2. Reference context provided for verification
+    3. Both responses presented neutrally
     4. Specific JSON output format requested
     """
-    return f"""## QUESTION
+    context_section = ""
+    if reference_context.strip():
+        context_section = f"## REFERENCE CONTEXT (Ground Truth / Retrieved Facts)\n{reference_context}\n\n"
+
+    return f"""{context_section}## QUESTION
 {question}
 
 ## RAG RESPONSE (Uses Wikidata Knowledge Retrieval)
@@ -136,12 +143,11 @@ def build_judge_prompt(
 
 ## YOUR TASK
 
-Analyze both responses using YOUR KNOWLEDGE for:
-1. Fictional entity detection (good responses state "cannot verify", not invent details)
-2. Fact verification (dates, places, achievements, relationships)
-3. Fabricated collaborations or connections
-4. Scope discipline: extra information must not improve the score
-5. Penalize unsupported or unnecessary extra claims as risky behavior (potential hallucination)
+Analyze both responses for:
+1. Cross-referencing: Do they accurately reflect the provided REFERENCE CONTEXT?
+2. Fictional entity detection: (good responses state "cannot verify", not invent details)
+3. Fact verification: dates, places, accomplishments
+4. Fabrication: Penalize unsupported extra claims as hallucinations.
 
 Respond with JSON in this format:
 ```json
@@ -195,6 +201,7 @@ def call_openai_judge(
     question: str,
     rag_response: str,
     prompt_only_response: str,
+    reference_context: str = "",
     model: str = OPENAI_JUDGE_MODEL,
     temperature: float = 0.1,
     verbose: bool = False,
@@ -202,12 +209,13 @@ def call_openai_judge(
     """
     Call OpenAI to evaluate both responses for hallucinations.
 
-    The judge uses its own knowledge to verify facts - no ground truth needed.
+    The judge uses provided context AND its own knowledge to verify facts.
 
     Args:
         question: The original question asked
         rag_response: Response from the RAG model
         prompt_only_response: Response from the prompt-only model
+        reference_context: Facts/Ground truth to use for verification
         model: OpenAI model to use (configurable via OPENAI_JUDGE_MODEL)
         temperature: Low temperature for consistent evaluation
         verbose: Print debug information
@@ -235,6 +243,7 @@ def call_openai_judge(
         question=question,
         rag_response=rag_response,
         prompt_only_response=prompt_only_response,
+        reference_context=reference_context,
     )
 
     if verbose:
@@ -337,27 +346,28 @@ def judge_responses(
     question: str,
     rag_response: str,
     prompt_only_response: str,
+    reference_context: str = "",
     model: str = OPENAI_JUDGE_MODEL,
     verbose: bool = False,
 ) -> JudgeResult:
     """
     Main entry point for LLM-as-a-judge evaluation.
 
-    The judge uses the configured OpenAI model's own knowledge to verify facts.
+    The judge uses the configured OpenAI model to verify facts against context.
 
     Example usage:
         result = judge_responses(
             question="Who is Niels Bohr?",
             rag_response="Niels Bohr was a Danish physicist born in 1885...",
             prompt_only_response="Niels Bohr was a physicist who worked on atomic theory...",
+            reference_context="Niels Henrik David Bohr was a Danish physicist born Oct 7 1885..."
         )
-        print(f"Winner: {result.winner}")
-        print(f"Reasoning: {result.reasoning}")
     """
     return call_openai_judge(
         question=question,
         rag_response=rag_response,
         prompt_only_response=prompt_only_response,
+        reference_context=reference_context,
         model=model,
         verbose=verbose,
     )

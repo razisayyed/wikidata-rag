@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..settings import RAGTRUTH_MODEL, get_ollama_connection_kwargs
 from ..utils.imports import ChatOllama
+from .evaluation import build_primary_context
 
 # ==========================================================================
 # Data Structures
@@ -198,21 +199,6 @@ class RAGTruthEvaluator:
             **get_ollama_connection_kwargs(),
         )
 
-    def _build_source_context(
-        self,
-        ground_truth: str,
-        retrieved_context: str = "",
-    ) -> str:
-        """Build the combined source context for evaluation."""
-        parts = []
-
-        if ground_truth.strip():
-            parts.append(f"=== Ground Truth ===\n{ground_truth.strip()}")
-
-        if retrieved_context.strip():
-            parts.append(f"=== Retrieved Facts ===\n{retrieved_context.strip()}")
-
-        return "\n\n".join(parts) if parts else "(No context provided)"
 
     def _parse_json_response(self, raw_output: str) -> Tuple[Dict[str, Any], str]:
         """
@@ -280,6 +266,7 @@ class RAGTruthEvaluator:
         response: str,
         ground_truth: str,
         retrieved_context: str = "",
+        eval_context_mode: str = "ground_truth",
         verbose: bool = False,
     ) -> RAGTruthResult:
         """
@@ -290,13 +277,22 @@ class RAGTruthEvaluator:
             response: The model's response to evaluate
             ground_truth: Known correct answer/facts
             retrieved_context: Additional retrieved context (e.g., from RAG)
+            eval_context_mode: "ground_truth" (default) or "combined"
             verbose: Print debug information
 
         Returns:
             RAGTruthResult with hallucination detection results
         """
         # Build source context
-        source_context = self._build_source_context(ground_truth, retrieved_context)
+        source_context = build_primary_context(
+            ground_truth=ground_truth,
+            retrieved_context=retrieved_context,
+            eval_context_mode=eval_context_mode,
+        )
+
+        # Ensure we have at least something to show
+        if not source_context.strip():
+            source_context = "(No context provided)"
 
         # Select prompt template
         prompt_template = (
