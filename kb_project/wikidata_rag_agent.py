@@ -46,7 +46,7 @@ from .tools import (
     wikidata_sparql,
     fetch_wikipedia_article_tool,
 )
-from .tools.tool_protocol_state import reset_tool_protocol_state
+from .tools.tool_protocol_state import reset_tool_protocol_state, set_question_context
 
 OLLAMA_MODEL = WIKIDATA_RAG_MODEL
 
@@ -181,6 +181,7 @@ def answer_question(
 ) -> str:
     """Send a question through the Wikidata agent and return its answer."""
     reset_tool_protocol_state()
+    set_question_context(question)
     graph = agent or build_agent()
 
     if verbose:

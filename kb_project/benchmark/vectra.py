@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from ..settings import RAG_RECURSION_LIMIT, VECTARA_DEVICE, resolve_device
-from ..tools.tool_protocol_state import reset_tool_protocol_state
+from ..tools.tool_protocol_state import reset_tool_protocol_state, set_question_context
 from ..utils.messages import content_to_text
 from ..wikidata_rag_agent import build_agent, finalize_agent_answer, is_process_message
 from .models import TestCase
@@ -123,6 +123,26 @@ def _has_disambiguation_warning(tool_calls: List[ToolCall]) -> bool:
     return False
 
 
+def _has_successful_entity_fetch(tool_calls: List[ToolCall]) -> bool:
+    """
+    Return True when at least one fetch_entity_properties call returned data.
+
+    This avoids false refusal overrides when candidate search emitted a warning
+    but the model still selected a concrete QID and fetched valid properties.
+    """
+    for tool_call in tool_calls:
+        if tool_call.name != "fetch_entity_properties":
+            continue
+        output = (tool_call.output or "").strip()
+        if not output:
+            continue
+        if output.lower().startswith("error:"):
+            continue
+        if "QID:" in output or "Entity:" in output:
+            return True
+    return False
+
+
 def _apply_no_answer_gating(answer: str, tool_calls: List[ToolCall]) -> str:
     current = (answer or "").strip()
     if _looks_like_refusal(current):
@@ -138,7 +158,9 @@ def _apply_no_answer_gating(answer: str, tool_calls: List[ToolCall]) -> str:
         joined = ", ".join(unresolved[:-1]) + f", and {unresolved[-1]}"
         return f"I cannot verify that {joined} exist, and I cannot verify this claim."
 
-    if _has_disambiguation_warning(tool_calls):
+    if _has_disambiguation_warning(tool_calls) and not _has_successful_entity_fetch(
+        tool_calls
+    ):
         return "I cannot determine which entity the question refers to."
 
     return current
@@ -148,6 +170,7 @@ def run_agent_with_capture(question: str, agent=None, verbose: bool = True) -> A
     """Run RAG agent and capture tool usage and final answer."""
     graph = agent or build_agent()
     reset_tool_protocol_state()
+    set_question_context(question)
 
     run = AgentRun(question=question)
     fallback_final_answer = ""

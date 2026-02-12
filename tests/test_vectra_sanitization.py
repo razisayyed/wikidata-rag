@@ -58,3 +58,31 @@ def test_no_answer_gating_forces_refusal_when_entity_not_found():
         ],
     )
     assert "cannot verify" in gated.lower()
+
+
+def test_disambiguation_warning_does_not_override_successful_property_fetch():
+    original = "Alexander Fleming discovered penicillin in 1928."
+    gated = _apply_no_answer_gating(
+        answer=original,
+        tool_calls=[
+            ToolCall(
+                name="search_entity_candidates",
+                args={"entity_name": "penicillin"},
+                output=(
+                    "CANDIDATES for 'penicillin' (2 found):\n"
+                    "DISAMBIGUATION WARNING: no high-confidence unique match was found."
+                ),
+            ),
+            ToolCall(
+                name="fetch_entity_properties",
+                args={"qid": "Q12190", "properties": ["P31", "P61"]},
+                output=(
+                    "Entity: penicillin\n"
+                    "QID: Q12190\n"
+                    "P31: instance of - structural class of chemical entities\n"
+                    "P61: discoverer or inventor - Alexander Fleming"
+                ),
+            ),
+        ],
+    )
+    assert gated == original

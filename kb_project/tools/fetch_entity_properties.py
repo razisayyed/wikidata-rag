@@ -12,11 +12,29 @@ from ..utils.logging import (
     configure_logging,
     log_tool_usage,
 )
-from .tool_protocol_state import get_authorized_qids, is_qid_authorized
+from .tool_protocol_state import (
+    get_authorized_qids,
+    get_question_context,
+    is_qid_authorized,
+)
 from ..wikidata.properties import WIKIDATA_PROPERTIES
 from ..wikidata.sparql import run_sparql as _run_sparql
 
 logger = configure_logging()
+
+_INTENT_PROPERTY_RULES: List[tuple[tuple[str, ...], tuple[str, ...]]] = [
+    (("discover", "discovered", "discoverer", "invent", "invented", "inventor"), ("P61", "P575")),
+    (("born", "birth", "date of birth"), ("P569",)),
+    (("died", "death", "date of death"), ("P570",)),
+    (("capital",), ("P36", "P1376")),
+    (("wrote", "author", "novel", "book"), ("P50", "P577")),
+    (("painted", "painter", "painted by"), ("P170",)),
+    (("formula", "chemical symbol"), ("P274",)),
+    (("boiling point", "boils"), ("P2102",)),
+    (("speed of light", "speed"), ("P2052",)),
+    (("work for", "worked for", "employer", "organization"), ("P108", "P39")),
+]
+_BASELINE_PROPERTY_GUARDRAIL: tuple[str, ...] = ("P31",)
 
 
 def _format_time_value(value: str) -> str:
@@ -83,6 +101,48 @@ def _normalize_temporal_alias(
         "Government Communications Headquarters/GCHQ -> Government Code and Cypher School (GC&CS)"
     )
     return normalized, note
+
+
+def _augment_properties_for_question(
+    properties: List[str],
+    question: str,
+) -> tuple[List[str], List[str]]:
+    """
+    Add deterministic intent-critical properties from question keywords.
+
+    This reduces failures when the LLM under-selects required properties.
+    """
+    normalized_question = (question or "").strip().lower()
+    merged: List[str] = []
+    seen = set()
+
+    def _add(prop: str) -> None:
+        prop_id = (prop or "").strip().upper()
+        if not prop_id or prop_id in seen:
+            return
+        if prop_id not in WIKIDATA_PROPERTIES:
+            return
+        seen.add(prop_id)
+        merged.append(prop_id)
+
+    for prop in properties:
+        _add(prop)
+
+    for prop in _BASELINE_PROPERTY_GUARDRAIL:
+        _add(prop)
+
+    auto_added: List[str] = []
+    if normalized_question:
+        for keywords, required_props in _INTENT_PROPERTY_RULES:
+            if not any(keyword in normalized_question for keyword in keywords):
+                continue
+            for prop in required_props:
+                before = len(merged)
+                _add(prop)
+                if len(merged) > before:
+                    auto_added.append(prop)
+
+    return merged, auto_added
 
 
 class FetchPropertiesInput(BaseModel):
@@ -174,6 +234,10 @@ def fetch_entity_properties(
         for p in processed_properties
         if p.strip().upper() in WIKIDATA_PROPERTIES
     ]
+    valid_props, auto_added_props = _augment_properties_for_question(
+        valid_props,
+        question=get_question_context(),
+    )
 
     if not valid_props:
         return "Error: No valid properties specified."
@@ -200,12 +264,20 @@ def fetch_entity_properties(
             qid=qid,
             include_qualifiers=include_qualifiers,
         )
+        if auto_added_props:
+            formatted_results = (
+                "Tool note: auto-added intent properties: "
+                + ", ".join(sorted(set(auto_added_props)))
+                + "\n"
+                + formatted_results
+            )
 
         log_tool_usage(
             "fetch_entity_properties",
             {
                 "qid": qid,
                 "properties": properties,
+                "auto_added_properties": auto_added_props,
                 "include_qualifiers": include_qualifiers,
             },
             formatted_results,

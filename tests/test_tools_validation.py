@@ -3,6 +3,11 @@ from __future__ import annotations
 import importlib
 
 from kb_project.tools.fetch_entity_properties import format_property_results
+from kb_project.tools.tool_protocol_state import (
+    register_search_candidates,
+    reset_tool_protocol_state,
+    set_question_context,
+)
 from kb_project.tools.wikidata_sparql import (
     is_safe_read_only_select,
     MAX_SPARQL_ROWS,
@@ -106,3 +111,45 @@ def test_property_catalog_includes_core_physical_quantity_properties():
     # Needed for current benchmark coverage (boiling point and speed questions).
     assert "P2102" in WIKIDATA_PROPERTIES  # boiling point
     assert "P2052" in WIKIDATA_PROPERTIES  # speed
+
+
+def test_fetch_entity_properties_auto_adds_discoverer_properties_from_question(monkeypatch):
+    reset_tool_protocol_state()
+    set_question_context("Who discovered penicillin?")
+    register_search_candidates(
+        entity_name="penicillin",
+        candidates=[{"qid": "Q12190", "label": "penicillin"}],
+    )
+
+    module = importlib.import_module("kb_project.tools.fetch_entity_properties")
+    captured = {"query": ""}
+
+    def fake_run_sparql(query):
+        captured["query"] = query
+        return {
+            "results": {
+                "bindings": [
+                    {
+                        "itemLabel": {"value": "penicillin"},
+                        "itemDescription": {
+                            "value": "group of antibiotics derived from Penicillium fungi"
+                        },
+                        "p31ValueLabel": {"value": "structural class of chemical entities"},
+                        "p61ValueLabel": {"value": "Alexander Fleming"},
+                    }
+                ]
+            }
+        }
+
+    monkeypatch.setattr(module, "_run_sparql", fake_run_sparql)
+
+    payload = module.fetch_entity_properties.invoke(
+        {"qid": "Q12190", "properties": ["P31"]}
+    )
+
+    assert "p:P61" in captured["query"]
+    assert "Tool note: auto-added intent properties:" in payload
+    assert "P61" in payload
+    assert "P575" in payload
+    assert "P61: discoverer or inventor" in payload
+    assert "Alexander Fleming" in payload
