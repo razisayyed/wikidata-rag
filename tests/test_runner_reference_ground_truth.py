@@ -41,3 +41,20 @@ def test_build_reference_ground_truth_rich_respects_fact_cap():
     assert "- Fact A" in ref
     assert "- Fact B" not in ref
     assert "- Fact C" not in ref
+
+
+def test_build_reference_ground_truth_can_include_aliases():
+    case = TestCase(
+        question="Q",
+        ground_truth="Canonical answer.",
+        key_facts=["Fact A"],
+        accepted_aliases=[["Alpha", "A"], ["Beta", "B", "Bee"]],
+    )
+    ref = build_reference_ground_truth(
+        case,
+        ground_truth_style="concise",
+        include_aliases=True,
+    )
+    assert "Accepted equivalent wording:" in ref
+    assert "Alpha" in ref
+    assert "Beta" in ref

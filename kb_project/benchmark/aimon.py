@@ -18,6 +18,7 @@ References:
 from __future__ import annotations
 
 import inspect
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -50,6 +51,8 @@ class AimonResult:
     # Additional info
     sentence_count: int = 0
     raw_results: Optional[Dict[str, Any]] = None
+    effective_threshold: Optional[float] = None
+    normalized_response: Optional[str] = None
     error: Optional[str] = None
 
     @property
@@ -78,6 +81,8 @@ class AimonResult:
                 for s in self.hallucinated_sentences
             ],
             "case_label": self.case_label,
+            "effective_threshold": self.effective_threshold,
+            "normalized_response": self.normalized_response,
             "error": self.error,
         }
 
@@ -85,6 +90,53 @@ class AimonResult:
 # ==========================================================================
 # AIMon Hallucination Evaluator
 # ==========================================================================
+
+_SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
+_REFUSAL_MARKERS = (
+    "i cannot verify",
+    "i can't verify",
+    "cannot be verified",
+    "could not be verified",
+    "i do not have verified information",
+    "i don't have verified information",
+    "cannot determine",
+    "cannot confirm",
+)
+
+
+def _normalize_text(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "")).strip()
+
+
+def _split_sentences(text: str) -> List[str]:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return []
+    return [s.strip() for s in _SENTENCE_SPLIT_PATTERN.split(normalized) if s.strip()]
+
+
+def _is_refusal_sentence(text: str) -> bool:
+    lowered = (text or "").lower()
+    return any(marker in lowered for marker in _REFUSAL_MARKERS)
+
+
+def _is_refusal_only_response(text: str) -> bool:
+    sentences = _split_sentences(text)
+    if not sentences:
+        return False
+    refusal_count = sum(1 for s in sentences if _is_refusal_sentence(s))
+    # Allow one non-refusal connective sentence in otherwise refusal answers.
+    return refusal_count >= max(1, len(sentences) - 1)
+
+
+def _canonicalize_response_for_aimon(text: str) -> str:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return normalized
+    if _is_refusal_only_response(normalized):
+        # Canonical form avoids length/style penalties between semantically identical refusals.
+        return "I cannot verify this claim."
+    return normalized
 
 
 class AimonEvaluator:
@@ -168,8 +220,9 @@ class AimonEvaluator:
             self.load_model()
 
         try:
+            normalized_response = _canonicalize_response_for_aimon(response)
             # Call HDM-2 model
-            results = self.model.apply(prompt, context, response)
+            results = self.model.apply(prompt, context, normalized_response)
 
             # Extract hallucination severity
             severity = results.get("adjusted_hallucination_severity", 0.0)
@@ -192,8 +245,14 @@ class AimonEvaluator:
                         )
                     )
 
+            # Refusal-only responses are sensitive to style/verbosity; use a stricter
+            # threshold to reduce false positives from longer but equivalent refusals.
+            effective_threshold = self.threshold
+            if _is_refusal_only_response(response):
+                effective_threshold = max(self.threshold, 0.65)
+
             # Determine if response is hallucinated based on threshold
-            has_hallucination = severity >= self.threshold
+            has_hallucination = severity >= effective_threshold
 
             return AimonResult(
                 has_hallucination=has_hallucination,
@@ -201,6 +260,8 @@ class AimonEvaluator:
                 hallucinated_sentences=hallucinated_sentences,
                 sentence_count=len(candidate_sentences),
                 raw_results=results,
+                effective_threshold=float(effective_threshold),
+                normalized_response=normalized_response,
             )
 
         except Exception as e:

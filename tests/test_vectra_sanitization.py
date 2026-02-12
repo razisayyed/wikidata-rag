@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from kb_project.benchmark.vectra import AgentRun, ToolCall, sanitize_tool_output
+from kb_project.benchmark.vectra import (
+    AgentRun,
+    ToolCall,
+    _apply_no_answer_gating,
+    sanitize_tool_output,
+)
 
 
 def test_search_candidate_chatter_is_removed():
@@ -39,3 +44,17 @@ def test_agent_run_sanitized_context_keeps_factual_tool_outputs():
     sanitized = run.sanitized_retrieved_context
     assert "CANDIDATES for" not in sanitized
     assert "Government Code and Cypher School" in sanitized
+
+
+def test_no_answer_gating_forces_refusal_when_entity_not_found():
+    gated = _apply_no_answer_gating(
+        answer="Dr. Liora Anstrum collaborated extensively with Prof. Armin Delacroix.",
+        tool_calls=[
+            ToolCall(
+                name="search_entity_candidates",
+                args={"entity_name": "Dr. Liora Anstrum"},
+                output="NO CANDIDATES FOUND for 'Dr. Liora Anstrum'. Entity cannot be verified in Wikidata.",
+            )
+        ],
+    )
+    assert "cannot verify" in gated.lower()

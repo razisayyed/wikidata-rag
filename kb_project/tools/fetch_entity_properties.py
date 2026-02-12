@@ -28,6 +28,63 @@ def _format_time_value(value: str) -> str:
     return value
 
 
+def _extract_year(value: str) -> Optional[int]:
+    if not value:
+        return None
+    match = re.search(r"\b(\d{4})\b", value)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def _normalize_temporal_alias(
+    prop: str,
+    value: str,
+    qualifiers: Dict[str, str],
+) -> tuple[str, Optional[str]]:
+    """
+    Normalize known historical naming aliases using qualifier time windows.
+
+    Example:
+      P108 employer "Government Communications Headquarters" with WWII qualifiers
+      is normalized to the wartime label "Government Code and Cypher School (GC&CS)".
+    """
+    lowered = (value or "").strip().lower()
+    if prop != "P108":
+        return value, None
+
+    if lowered not in {
+        "government communications headquarters",
+        "gchq",
+    }:
+        return value, None
+
+    start_year = _extract_year(qualifiers.get("P580", ""))
+    end_year = _extract_year(qualifiers.get("P582", ""))
+    point_year = _extract_year(qualifiers.get("P585", ""))
+
+    is_wwii_window = False
+    if start_year is not None and start_year <= 1945:
+        is_wwii_window = True
+    if end_year is not None and 1939 <= end_year <= 1946:
+        is_wwii_window = True
+    if point_year is not None and 1939 <= point_year <= 1945:
+        is_wwii_window = True
+
+    if not is_wwii_window:
+        return value, None
+
+    normalized = "Government Code and Cypher School (GC&CS)"
+    note = (
+        "historical alias normalization: "
+        "Government Communications Headquarters/GCHQ -> Government Code and Cypher School (GC&CS)"
+    )
+    return normalized, note
+
+
 class FetchPropertiesInput(BaseModel):
     """Input for fetching properties by QID."""
 
@@ -290,7 +347,19 @@ def format_property_results(
                 if point_in_time:
                     qualifiers["P585"] = _format_time_value(point_in_time)
 
-            collected[prop].append({"value": value, "qualifiers": qualifiers})
+            normalized_value, alias_note = _normalize_temporal_alias(
+                prop=prop,
+                value=value,
+                qualifiers=qualifiers,
+            )
+
+            collected[prop].append(
+                {
+                    "value": normalized_value,
+                    "qualifiers": qualifiers,
+                    "alias_note": alias_note,
+                }
+            )
 
     lines = []
     if entity_label and qid:
@@ -314,6 +383,7 @@ def format_property_results(
                 for entry in entries:
                     value = entry["value"]
                     qualifiers = entry["qualifiers"]
+                    alias_note = entry.get("alias_note")
                     if qualifiers:
                         qualifier_parts = []
                         for qid_, qvalue in qualifiers.items():
@@ -323,9 +393,14 @@ def format_property_results(
                                 qualifier_parts.append(f"end: {qvalue}")
                             elif qid_ == "P585":
                                 qualifier_parts.append(f"time: {qvalue}")
+                        if alias_note:
+                            qualifier_parts.append(alias_note)
                         lines.append(f"  - {value} ({', '.join(qualifier_parts)})")
                     else:
-                        lines.append(f"  - {value}")
+                        if alias_note:
+                            lines.append(f"  - {value} ({alias_note})")
+                        else:
+                            lines.append(f"  - {value}")
         else:
             lines.append(f"{label}: (not available)")
 

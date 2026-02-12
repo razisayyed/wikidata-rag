@@ -79,3 +79,23 @@ def test_fetch_entity_properties_formats_qualifiers():
     assert "P108: employer" in output
     assert "start: 1938-09-04" in output
     assert "end: 1945-09-02" in output
+
+
+def test_fetch_entity_properties_temporal_alias_normalization_for_wwii():
+    bindings = [
+        {
+            "itemLabel": {"value": "Alan Turing"},
+            "itemDescription": {"value": "English computer scientist"},
+            "p108ValueLabel": {"value": "Government Communications Headquarters"},
+            "p108P580": {"value": "1938-01-01T00:00:00Z"},
+            "p108P582": {"value": "1945-01-01T00:00:00Z"},
+        }
+    ]
+    output, _ = format_property_results(
+        bindings=bindings,
+        valid_props=["P108"],
+        qid="Q7251",
+        include_qualifiers=True,
+    )
+    assert "Government Code and Cypher School (GC&CS)" in output
+    assert "historical alias normalization" in output

@@ -18,6 +18,8 @@ else:
     JudgeResult = Any
     RAGTruthResult = Any
 
+AIMON_WINNER_EPSILON = 0.05
+
 
 # ==========================================================================
 # Color Constants for Terminal Output
@@ -192,32 +194,26 @@ class ComparisonResult:
 
         rag_halluc = self.rag_aimon_result.has_hallucination
         prompt_halluc = self.prompt_only_aimon_result.has_hallucination
+        rag_severity = self.rag_aimon_result.hallucination_severity
+        prompt_severity = self.prompt_only_aimon_result.hallucination_severity
 
         if rag_halluc and not prompt_halluc:
             return "Prompt-Only"
         if not rag_halluc and prompt_halluc:
             return "RAG"
         if not rag_halluc and not prompt_halluc:
-            if (
-                self.rag_aimon_result.hallucination_severity
-                < self.prompt_only_aimon_result.hallucination_severity
-            ):
+            if abs(rag_severity - prompt_severity) <= AIMON_WINNER_EPSILON:
+                return "Tie"
+            if rag_severity < prompt_severity:
                 return "RAG"
-            if (
-                self.prompt_only_aimon_result.hallucination_severity
-                < self.rag_aimon_result.hallucination_severity
-            ):
+            if prompt_severity < rag_severity:
                 return "Prompt-Only"
             return "Tie"
 
-        if (
-            self.rag_aimon_result.hallucination_severity
-            < self.prompt_only_aimon_result.hallucination_severity
-        ):
+        if abs(rag_severity - prompt_severity) <= AIMON_WINNER_EPSILON:
+            return "Tie"
+        if rag_severity < prompt_severity:
             return "RAG"
-        if (
-            self.prompt_only_aimon_result.hallucination_severity
-            < self.rag_aimon_result.hallucination_severity
-        ):
+        if prompt_severity < rag_severity:
             return "Prompt-Only"
         return "Tie"

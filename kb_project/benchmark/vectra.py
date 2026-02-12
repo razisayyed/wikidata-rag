@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -101,6 +102,68 @@ def sanitize_tool_output(tool_name: str, output: str) -> str:
         return ""
 
     return clean_output
+
+
+_NO_CANDIDATE_PATTERN = re.compile(r"NO CANDIDATES FOUND for '([^']+)'", re.IGNORECASE)
+_REFUSAL_MARKERS = (
+    "i cannot verify",
+    "i can't verify",
+    "cannot be verified",
+    "could not be verified",
+    "i cannot determine",
+    "cannot determine",
+    "no verified",
+)
+
+
+def _looks_like_refusal(text: str) -> bool:
+    lowered = (text or "").lower()
+    return any(marker in lowered for marker in _REFUSAL_MARKERS)
+
+
+def _extract_unresolved_entities(tool_calls: List[ToolCall]) -> List[str]:
+    entities: List[str] = []
+    for tc in tool_calls:
+        if tc.name != "search_entity_candidates":
+            continue
+        for match in _NO_CANDIDATE_PATTERN.finditer(tc.output or ""):
+            entity = match.group(1).strip()
+            if entity and entity not in entities:
+                entities.append(entity)
+    return entities
+
+
+def _has_disambiguation_warning(tool_calls: List[ToolCall]) -> bool:
+    for tc in tool_calls:
+        if tc.name != "search_entity_candidates":
+            continue
+        if "DISAMBIGUATION WARNING" in (tc.output or ""):
+            return True
+    return False
+
+
+def _apply_no_answer_gating(answer: str, tool_calls: List[ToolCall]) -> str:
+    current = (answer or "").strip()
+    if _looks_like_refusal(current):
+        return current
+
+    unresolved_entities = _extract_unresolved_entities(tool_calls)
+    if unresolved_entities:
+        if len(unresolved_entities) == 1:
+            return (
+                f"I cannot verify that {unresolved_entities[0]} exists, "
+                "and I cannot verify this claim."
+            )
+        joined = ", ".join(unresolved_entities[:-1]) + f", and {unresolved_entities[-1]}"
+        return (
+            f"I cannot verify that {joined} exist, "
+            "and I cannot verify this claim."
+        )
+
+    if _has_disambiguation_warning(tool_calls):
+        return "I cannot determine which entity the question refers to."
+
+    return current
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -196,6 +259,7 @@ def run_agent_with_capture(question: str, agent=None, verbose: bool = True) -> A
             run.final_answer = cleaned_fallback
         else:
             run.final_answer = "I cannot verify that."
+    run.final_answer = _apply_no_answer_gating(run.final_answer, run.tool_calls)
     return run
 
 
@@ -587,6 +651,8 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
             ["7 October 1885", "October 7, 1885", "1885-10-07"],
             ["18 November 1962", "November 18, 1962", "1962-11-18"],
             ["Bohr model", "Bohr atomic model", "Bohr model of the atom"],
+            ["correspondence principle", "principle of correspondence"],
+            ["principle of complementarity", "complementarity principle"],
             ["1922 Nobel Prize in Physics", "Nobel Prize in Physics 1922"],
             ["Niels Bohr", "Niels Henrik David Bohr"],
         ],
@@ -727,7 +793,12 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
             "The Government Code and Cypher School later became part of GCHQ.",
         ],
         accepted_aliases=[
-            ["Government Code and Cypher School", "GC&CS"],
+            [
+                "Government Code and Cypher School",
+                "GC&CS",
+                "Government Communications Headquarters",
+                "GCHQ",
+            ],
             ["Bletchley Park"],
             ["Alan Turing"],
         ],

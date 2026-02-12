@@ -125,6 +125,14 @@ def main():
             "(default: include all available facts)."
         ),
     )
+    parser.add_argument(
+        "--no-ground-truth-aliases",
+        action="store_true",
+        help=(
+            "Disable accepted-alias expansion in benchmark ground-truth context "
+            "(enabled by default for fair factual scoring)."
+        ),
+    )
     args = parser.parse_args()
 
     # Handle ragtruth flag
@@ -158,6 +166,7 @@ def main():
         benchmark_axis=args.benchmark_axis,
         ground_truth_style=args.ground_truth_style,
         max_ground_truth_facts=args.max_ground_truth_facts,
+        include_ground_truth_aliases=not args.no_ground_truth_aliases,
         benchmark_temperature=args.benchmark_temperature,
         verbose=True,
         use_llm_judge=args.llm_judge,

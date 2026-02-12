@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List
 
 from langchain.tools import tool
@@ -17,6 +18,143 @@ from .tool_protocol_state import register_search_candidates
 from ..wikidata.sparql import run_sparql as _run_sparql
 
 logger = configure_logging()
+
+_TYPE_KEYWORDS: Dict[str, List[str]] = {
+    "person": ["person", "human", "scientist", "politician", "artist", "author"],
+    "scientist": ["scientist", "researcher", "physicist", "biologist", "chemist"],
+    "politician": ["politician", "president", "prime minister", "senator", "governor"],
+    "athlete": ["athlete", "footballer", "basketball player", "runner", "swimmer"],
+    "country": ["country", "sovereign state", "nation"],
+    "city": ["city", "town", "municipality", "metropolis"],
+    "organization": ["organization", "company", "university", "institution"],
+    "mountain": ["mountain", "peak", "summit"],
+    "lake": ["lake", "body of water"],
+    "island": ["island", "archipelago"],
+    "film": ["film", "movie", "motion picture"],
+    "book": ["book", "novel", "literary work", "publication"],
+    "album": ["album", "studio album", "music album"],
+    "song": ["song", "single", "musical composition"],
+    "painting": ["painting", "artwork", "oil painting"],
+    "software": ["software", "computer program", "application"],
+    "game": ["video game", "game", "computer game"],
+    "company": ["company", "corporation", "business", "enterprise"],
+    "band": ["band", "musical group", "rock band"],
+    "sports_team": ["sports team", "football club", "basketball team"],
+    "political_party": ["political party", "party"],
+    "ngo": ["non-governmental organization", "ngo", "nonprofit"],
+    "species": ["species", "taxon", "organism"],
+    "chemical": ["chemical compound", "chemical element", "molecule"],
+    "disease": ["disease", "medical condition", "illness"],
+    "event": ["event", "occurrence", "historical event", "war"],
+    "award": ["award", "prize", "honor"],
+}
+_PERSON_TITLE_PREFIXES = ("dr ", "prof ", "mr ", "mrs ", "ms ")
+_NON_PERSON_HINTS = (
+    "street",
+    "painting",
+    "album",
+    "film",
+    "award",
+    "building",
+    "timeline",
+    "radio",
+    "asteroid",
+    "memorial",
+    "episode",
+    "year",
+)
+
+
+def _normalize_for_match(text: str) -> str:
+    cleaned = re.sub(r"[^\w\s]", " ", (text or "").lower())
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _tokenize(text: str) -> List[str]:
+    normalized = _normalize_for_match(text)
+    if not normalized:
+        return []
+    return normalized.split()
+
+
+def _is_person_like_query(entity_name: str, entity_type: str) -> bool:
+    if (entity_type or "").strip().lower() in {"person", "scientist", "politician", "athlete"}:
+        return True
+
+    normalized = _normalize_for_match(entity_name)
+    if not normalized:
+        return False
+
+    stripped = normalized
+    for prefix in _PERSON_TITLE_PREFIXES:
+        if stripped.startswith(prefix):
+            stripped = stripped[len(prefix) :]
+            break
+    tokens = stripped.split()
+    return len(tokens) >= 2
+
+
+def _type_score(entity: Dict[str, Any], entity_type: str) -> int:
+    if not entity_type:
+        return 0
+    keywords = _TYPE_KEYWORDS.get(entity_type.lower(), [entity_type.lower()])
+    desc_lower = str(entity.get("description", "")).lower()
+    types_lower = [t.lower() for t in entity.get("instance_of", [])]
+    score = 0
+    for kw in keywords:
+        if kw in desc_lower:
+            score += 2
+        if any(kw in t for t in types_lower):
+            score += 3
+    return score
+
+
+def _score_entity(entity_name: str, entity: Dict[str, Any], entity_type: str) -> int:
+    query_norm = _normalize_for_match(entity_name)
+    label_norm = _normalize_for_match(str(entity.get("label", "")))
+    desc_lower = str(entity.get("description", "")).lower()
+    types_lower = [t.lower() for t in entity.get("instance_of", [])]
+
+    score = 0
+
+    if label_norm == query_norm:
+        score += 30
+    elif label_norm.startswith(query_norm):
+        score += 18
+    elif query_norm and query_norm in label_norm:
+        score += 10
+
+    query_tokens = set(_tokenize(query_norm))
+    label_tokens = set(_tokenize(label_norm))
+    token_overlap = len(query_tokens & label_tokens)
+    score += token_overlap * 2
+    if query_tokens and query_tokens.issubset(label_tokens):
+        score += 8
+
+    if _is_person_like_query(entity_name, entity_type):
+        if any("human" in t or "person" in t for t in types_lower):
+            score += 8
+        else:
+            score -= 10
+        if any(h in desc_lower for h in _NON_PERSON_HINTS):
+            score -= 7
+        if re.search(r"\b\d{4}[–-]\d{4}\b", desc_lower):
+            score += 3
+
+    # Penalize likely unwanted fictional matches for real-world factual queries.
+    if "fictional" in desc_lower and "fictional" not in query_norm:
+        score -= 6
+
+    score += _type_score(entity, entity_type)
+    return score
+
+
+def _confidence_label(score: int, gap_to_next: int) -> str:
+    if score >= 24 and gap_to_next >= 4:
+        return "high"
+    if score >= 14:
+        return "medium"
+    return "low"
 
 
 class SearchCandidatesInput(BaseModel):
@@ -61,6 +199,8 @@ def search_entity_candidates(entity_name: str, entity_type: str = "") -> str:
     for i, c in enumerate(candidates, 1):
         desc = c.get("description", "")
         instance_of = c.get("instance_of", "")
+        confidence = str(c.get("confidence", "low")).upper()
+        score = c.get("disambiguation_score", 0)
 
         # Build display string
         if desc and instance_of:
@@ -72,7 +212,29 @@ def search_entity_candidates(entity_name: str, entity_type: str = "") -> str:
         else:
             info = "(no description)"
 
-        lines.append(f"{i}. [{c['qid']}] {c['label']} - {info}")
+        lines.append(
+            f"{i}. [{c['qid']}] {c['label']} - {info} "
+            f"(disambiguation: {confidence}, score: {score})"
+        )
+
+    top_score = int(candidates[0].get("disambiguation_score", 0))
+    second_score = int(candidates[1].get("disambiguation_score", -999)) if len(candidates) > 1 else -999
+    top_conf = str(candidates[0].get("confidence", "low")).lower()
+    ambiguous = (top_score - second_score) <= 2 and len(candidates) > 1
+
+    lines.append("")
+    if top_conf == "low" or ambiguous:
+        lines.append(
+            "DISAMBIGUATION WARNING: no high-confidence unique match was found."
+        )
+        lines.append(
+            "NO-ANSWER GATING: If you cannot disambiguate confidently from question context, "
+            "do NOT select a QID and refuse verification for that entity."
+        )
+    else:
+        lines.append(
+            f"Top candidate confidence: {top_conf.upper()} (score gap to next: {top_score - second_score})."
+        )
 
     lines.append("")
     lines.append(
@@ -171,87 +333,23 @@ LIMIT {limit * 2}
             continue
         filtered_entities.append(e)
 
-    # Additional filtering based on entity_type hint
-    if entity_type:
-        # Common type mappings for better filtering
-        type_keywords = {
-            # People-related types
-            "person": [
-                "person",
-                "human",
-                "politician",
-                "scientist",
-                "artist",
-                "author",
-            ],
-            "scientist": [
-                "scientist",
-                "researcher",
-                "physicist",
-                "biologist",
-                "chemist",
-            ],
-            "politician": [
-                "politician",
-                "president",
-                "prime minister",
-                "senator",
-                "governor",
-            ],
-            "athlete": [
-                "athlete",
-                "footballer",
-                "basketball player",
-                "runner",
-                "swimmer",
-            ],
-            # Place-related types
-            "country": ["country", "sovereign state", "nation"],
-            "city": ["city", "town", "municipality", "metropolis"],
-            "organization": ["organization", "company", "university", "institution"],
-            # Geographic features
-            "mountain": ["mountain", "peak", "summit"],
-            "lake": ["lake", "body of water"],
-            "island": ["island", "archipelago"],
-            # Work types
-            "film": ["film", "movie", "motion picture"],
-            "book": ["book", "novel", "literary work", "publication"],
-            "album": ["album", "studio album", "music album"],
-            "song": ["song", "single", "musical composition"],
-            "painting": ["painting", "artwork", "oil painting"],
-            "software": ["software", "computer program", "application"],
-            "game": ["video game", "game", "computer game"],
-            # Organization types
-            "company": ["company", "corporation", "business", "enterprise"],
-            "band": ["band", "musical group", "rock band"],
-            "sports_team": ["sports team", "football club", "basketball team"],
-            "political_party": ["political party", "party"],
-            "ngo": ["non-governmental organization", "NGO", "nonprofit"],
-            # Other types
-            "species": ["species", "taxon", "organism"],
-            "chemical": ["chemical compound", "chemical element", "molecule"],
-            "disease": ["disease", "medical condition", "illness"],
-            "event": ["event", "occurrence", "historical event"],
-            "award": ["award", "prize", "honor"],
-        }
-        keywords = type_keywords.get(entity_type.lower(), [entity_type.lower()])
+    # Composite ranking for stronger disambiguation and stable candidate quality.
+    for e in filtered_entities:
+        e["disambiguation_score"] = _score_entity(label, e, entity_type)
 
-        def score_entity(e: Dict[str, Any]) -> int:
-            """Score entity based on type match."""
+    filtered_entities.sort(
+        key=lambda e: int(e.get("disambiguation_score", 0)),
+        reverse=True,
+    )
 
-            score = 0
-            desc_lower = e["description"].lower()
-            types_lower = [t.lower() for t in e["instance_of"]]
-
-            for kw in keywords:
-                if kw in desc_lower:
-                    score += 2
-                if any(kw in t for t in types_lower):
-                    score += 3
-            return score
-
-        # Sort by type match score (higher first), keeping original order for ties
-        filtered_entities.sort(key=lambda e: score_entity(e), reverse=True)
+    # Add confidence label using top-2 margin.
+    top_score = int(filtered_entities[0].get("disambiguation_score", 0)) if filtered_entities else 0
+    second_score = int(filtered_entities[1].get("disambiguation_score", -999)) if len(filtered_entities) > 1 else -999
+    gap = top_score - second_score
+    for idx, e in enumerate(filtered_entities):
+        score = int(e.get("disambiguation_score", 0))
+        local_gap = gap if idx == 0 else score - int(filtered_entities[idx + 1].get("disambiguation_score", -999)) if idx + 1 < len(filtered_entities) else score
+        e["confidence"] = _confidence_label(score, local_gap)
 
     # Format instance_of as string for output
     for e in filtered_entities:
