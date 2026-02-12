@@ -223,11 +223,13 @@ WIKIDATA_PROPERTIES: Dict[str, str] = {
     "P366": "has use",
     "P1552": "has characteristic",
     "P2275": "World Health Organization essential medicines",
+    "P2052": "speed (for physical quantities/constants)",
     # === CHEMICAL/MEDICAL ===
     "P231": "CAS Registry Number",
     "P662": "PubChem CID",
     "P683": "ChEBI ID",
     "P2067": "mass",
+    "P2102": "boiling point",
     "P274": "chemical formula",
     "P117": "chemical structure",
     "P2175": "medical condition treated",

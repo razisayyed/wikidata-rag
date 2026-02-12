@@ -1,841 +1,560 @@
-"""
-Benchmark Runner Module
-=======================
-Contains the main comparison test suite runner with minimal console output.
-Detailed logging is saved to report files.
-"""
+"""Legacy-simple benchmark runner with independent evaluator tracks."""
 
 from __future__ import annotations
 
 import os
 import shutil
 import textwrap
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
-from ..wikidata_rag_agent import build_agent
-from ..prompt_only_llm import (
-    answer_question_prompt_only,
-    build_prompt_only_agent,
-)
+from ..prompt_only_llm import answer_question_prompt_only, build_prompt_only_agent
 from ..settings import OPENAI_JUDGE_MODEL, RAGTRUTH_MODEL
-
-from .models import ComparisonResult, Colors
-from .evaluation import (
-    evaluate_response,
-    evaluate_rag_faithfulness,
-    build_primary_context,
-)
-from .ragtruth import RAGTruthEvaluator, interpret_ragtruth_for_dual_track
+from ..wikidata_rag_agent import build_agent
 from .aimon import AimonEvaluator
-from .vectra import (
-    GROUND_TRUTH_TEST_CASES,
-    TestCase,
-    load_hallucination_model,
-    run_agent_with_capture,
-)
+from .evaluation import evaluate_response
 from .llm_judge import judge_responses
-
-VALID_GROUND_TRUTH_STYLES = {"concise", "rich"}
-VALID_COMPLETENESS_LABELS = {"complete", "partial", "insufficient"}
-COMPLETENESS_RANK = {"complete": 0, "partial": 1, "insufficient": 2}
-VALID_BENCHMARK_AXES = {"dual_track", "legacy"}
-OMISSION_PATTERNS = (
-    "omit",
-    "omits",
-    "omitted",
-    "incomplete",
-    "fails to mention",
-    "missing",
-    "lacks",
-    "insufficient",
+from .models import (
+    AIMON_WINNER_EPSILON,
+    ANALYSIS_VERSION,
+    CaseResult,
+    Colors,
+    EvaluatorResult,
+    ModelOutput,
+    SuiteResult,
+    TestCase,
+    label_from_hallucination_flag,
+    winner_from_labels,
 )
+from .ragtruth import RAGTruthEvaluator
+from .vectra import GROUND_TRUTH_TEST_CASES, run_agent_with_capture, load_hallucination_model
+
+EVALUATOR_ORDER = ["vectara", "aimon", "llm_judge", "ragtruth"]
 
 
-# ==========================================================================
-# Test Functions (with minimal console output)
-# ==========================================================================
-
-
-def build_reference_ground_truth(
-    test_case: TestCase,
-    ground_truth_style: str = "concise",
-    max_ground_truth_facts: Optional[int] = None,
-    include_aliases: bool = False,
-) -> str:
-    """
-    Build benchmark reference context from the test case.
-
-    Styles:
-    - concise: canonical answer only (default, fairer for short answers).
-    - rich: canonical answer plus key-fact bullets.
-    """
-    canonical = test_case.ground_truth.strip()
-    style = (ground_truth_style or "concise").strip().lower()
-    if style not in VALID_GROUND_TRUTH_STYLES:
-        style = "concise"
-
-    def _render_alias_section() -> List[str]:
-        alias_groups = getattr(test_case, "accepted_aliases", []) or []
-        alias_lines: List[str] = []
-        for group in alias_groups:
-            normalized = [str(v).strip() for v in group if str(v).strip()]
-            if len(normalized) < 2:
-                continue
-            canonical_term = normalized[0]
-            alternatives = ", ".join(normalized[1:])
-            alias_lines.append(f"- {canonical_term} ≈ {alternatives}")
-
-        question_lower = (test_case.question or "").lower()
-        # Temporal alias note for historical organization naming.
-        if "alan turing" in question_lower and "world war ii" in question_lower:
-            alias_lines.append(
-                "- Government Code and Cypher School (GC&CS) is the WWII-era naming; "
-                "Government Communications Headquarters (GCHQ) is a later organizational naming."
-            )
-        return alias_lines
-
-    alias_lines = _render_alias_section() if include_aliases else []
-
-    if style == "concise":
-        if not alias_lines:
-            return canonical
-        return "\n".join([canonical, "", "Accepted equivalent wording:", *alias_lines]).strip()
-
-    key_facts = [fact.strip() for fact in test_case.key_facts if fact and fact.strip()]
-    if max_ground_truth_facts is not None and max_ground_truth_facts > 0:
-        key_facts = key_facts[:max_ground_truth_facts]
-
-    if not key_facts:
+def build_reference_ground_truth(test_case: TestCase, include_aliases: bool = False) -> str:
+    """Build canonical ground-truth context, with optional alias hints."""
+    canonical = (test_case.ground_truth or "").strip()
+    if not include_aliases:
         return canonical
 
-    parts: List[str] = [canonical]
-    if key_facts:
-        parts.append("Key facts:")
-        parts.extend(f"- {fact}" for fact in key_facts)
+    alias_lines: List[str] = []
+    for group in test_case.accepted_aliases:
+        values = [str(value).strip() for value in group if str(value).strip()]
+        if len(values) < 2:
+            continue
+        alias_lines.append(f"- {values[0]} ~= {', '.join(values[1:])}")
 
-    if alias_lines:
-        parts.append("")
-        parts.append("Accepted equivalent wording:")
-        parts.extend(alias_lines)
+    if not alias_lines:
+        return canonical
 
-    return "\n".join(parts).strip()
-
-
-def _normalize_completeness(value: Optional[str]) -> str:
-    candidate = str(value or "").strip().lower()
-    if candidate not in VALID_COMPLETENESS_LABELS:
-        return "insufficient"
-    return candidate
+    return "\n".join([canonical, "", "Accepted equivalent wording:", *alias_lines]).strip()
 
 
-def _merge_completeness(*labels: Optional[str]) -> str:
-    normalized = [_normalize_completeness(v) for v in labels if v is not None]
-    if not normalized:
-        return "insufficient"
-    return max(normalized, key=lambda label: COMPLETENESS_RANK[label])
+def _to_model_output(response: str, retrieved_context: str = "", tool_calls=None) -> ModelOutput:
+    serialized_calls = []
+    for tool_call in tool_calls or []:
+        serialized_calls.append(
+            {
+                "name": tool_call.name,
+                "args": tool_call.args,
+                "output": tool_call.output,
+            }
+        )
+    return ModelOutput(
+        response=(response or "").strip(),
+        retrieved_context=(retrieved_context or "").strip(),
+        tool_calls=serialized_calls,
+    )
 
 
-def _consensus_factual(
-    vectara_vote: Optional[bool],
-    llm_vote: Optional[bool],
-    ragtruth_vote: Optional[bool],
-) -> Tuple[Optional[bool], Optional[float]]:
-    votes = [v for v in (vectara_vote, llm_vote, ragtruth_vote) if v is not None]
-    if not votes:
-        return None, None
-
-    true_count = sum(1 for vote in votes if vote)
-    false_count = len(votes) - true_count
-
-    if true_count == false_count:
-        consensus = llm_vote if llm_vote is not None else votes[0]
-    else:
-        consensus = true_count > false_count
-
-    disagreement = sum(1 for vote in votes if vote != consensus) / len(votes)
-    return consensus, disagreement
+def _skipped_result(name: str, reason: str) -> EvaluatorResult:
+    return EvaluatorResult(
+        name=name,
+        status="skipped",
+        rag_label="skipped",
+        baseline_label="skipped",
+        winner="N/A",
+        notes=reason,
+    )
 
 
-def _has_grounding_evidence(sanitized_retrieved_context: str) -> bool:
-    """
-    Return True when retrieved context contains factual evidence.
-
-    Pure no-candidate signals should not be treated as available grounding.
-    """
-    context = (sanitized_retrieved_context or "").strip()
-    if not context:
-        return False
-
-    lines = [
-        line.strip()
-        for line in context.splitlines()
-        if line.strip() and not line.strip().startswith("[Tool:")
-    ]
-    if not lines:
-        return False
-    if all("NO CANDIDATES FOUND" in line.upper() for line in lines):
-        return False
-    return True
+def _error_result(name: str, reason: str) -> EvaluatorResult:
+    return EvaluatorResult(
+        name=name,
+        status="error",
+        rag_label="error",
+        baseline_label="error",
+        winner="N/A",
+        notes=reason,
+    )
 
 
-def _is_omission_only_signal(text: str) -> bool:
-    lowered = (text or "").lower()
-    return any(pattern in lowered for pattern in OMISSION_PATTERNS)
+def _evaluate_vectara(
+    rag_output: ModelOutput,
+    baseline_output: ModelOutput,
+    reference_ground_truth: str,
+    threshold: float,
+    hallucination_model,
+) -> EvaluatorResult:
+    try:
+        rag_eval = evaluate_response(
+            response=rag_output.response,
+            ground_truth=reference_ground_truth,
+            retrieved_context="",
+            model=hallucination_model,
+            threshold=threshold,
+            eval_context_mode="ground_truth",
+        )
+        baseline_eval = evaluate_response(
+            response=baseline_output.response,
+            ground_truth=reference_ground_truth,
+            retrieved_context="",
+            model=hallucination_model,
+            threshold=threshold,
+            eval_context_mode="ground_truth",
+        )
+
+        rag_label = label_from_hallucination_flag(rag_eval["is_hallucination"])
+        baseline_label = label_from_hallucination_flag(baseline_eval["is_hallucination"])
+        return EvaluatorResult(
+            name="vectara",
+            status="completed",
+            rag_label=rag_label,
+            baseline_label=baseline_label,
+            rag_score=float(rag_eval["score"]),
+            baseline_score=float(baseline_eval["score"]),
+            winner=winner_from_labels(
+                rag_label=rag_label,
+                baseline_label=baseline_label,
+                rag_score=float(rag_eval["score"]),
+                baseline_score=float(baseline_eval["score"]),
+                lower_is_better=False,
+            ),
+            notes="Factual consistency against ground truth.",
+        )
+    except Exception as exc:
+        return _skipped_result("vectara", f"Vectara evaluation unavailable: {exc}")
 
 
-def _render_three_column_console_table(
-    ground_truth: str,
-    rag_output: str,
-    prompt_output: str,
-) -> str:
-    """Render a wrapped console table with columns: Truth | RAG | Prompt-Only."""
+def _evaluate_aimon(
+    rag_output: ModelOutput,
+    baseline_output: ModelOutput,
+    test_case: TestCase,
+    reference_ground_truth: str,
+    aimon_evaluator: Optional[AimonEvaluator],
+) -> EvaluatorResult:
+    if aimon_evaluator is None:
+        return _skipped_result("aimon", "AIMon evaluator unavailable.")
+
+    try:
+        rag_result = aimon_evaluator.evaluate_response(
+            question=test_case.question,
+            ground_truth=reference_ground_truth,
+            retrieved_context="",
+            response=rag_output.response,
+            eval_context_mode="ground_truth",
+        )
+        baseline_result = aimon_evaluator.evaluate_response(
+            question=test_case.question,
+            ground_truth=reference_ground_truth,
+            retrieved_context="",
+            response=baseline_output.response,
+            eval_context_mode="ground_truth",
+        )
+
+        if rag_result.error or baseline_result.error:
+            return _skipped_result(
+                "aimon",
+                f"AIMon evaluation failed: {rag_result.error or baseline_result.error}",
+            )
+
+        rag_label = label_from_hallucination_flag(rag_result.has_hallucination)
+        baseline_label = label_from_hallucination_flag(baseline_result.has_hallucination)
+        return EvaluatorResult(
+            name="aimon",
+            status="completed",
+            rag_label=rag_label,
+            baseline_label=baseline_label,
+            rag_score=float(rag_result.hallucination_severity),
+            baseline_score=float(baseline_result.hallucination_severity),
+            winner=winner_from_labels(
+                rag_label=rag_label,
+                baseline_label=baseline_label,
+                rag_score=float(rag_result.hallucination_severity),
+                baseline_score=float(baseline_result.hallucination_severity),
+                lower_is_better=True,
+                epsilon=AIMON_WINNER_EPSILON,
+            ),
+            notes=(
+                "Sentence-level hallucination severity. "
+                f"RAG sentences={len(rag_result.hallucinated_sentences)}, "
+                f"BASELINE sentences={len(baseline_result.hallucinated_sentences)}"
+            ),
+        )
+    except Exception as exc:
+        return _skipped_result("aimon", f"AIMon evaluation unavailable: {exc}")
+
+
+def _evaluate_llm_judge(
+    rag_output: ModelOutput,
+    baseline_output: ModelOutput,
+    test_case: TestCase,
+    reference_ground_truth: str,
+) -> EvaluatorResult:
+    if not os.environ.get("OPENAI_API_KEY"):
+        return _skipped_result("llm_judge", "OPENAI_API_KEY is not set.")
+
+    try:
+        judge = judge_responses(
+            question=test_case.question,
+            rag_response=rag_output.response,
+            prompt_only_response=baseline_output.response,
+            reference_context=reference_ground_truth,
+            model=OPENAI_JUDGE_MODEL,
+            verbose=False,
+        )
+
+        if judge.error:
+            return _skipped_result("llm_judge", f"LLM judge unavailable: {judge.error}")
+
+        rag_label = "hallucinated" if judge.rag_has_factual_error else "factual"
+        baseline_label = "hallucinated" if judge.prompt_has_factual_error else "factual"
+
+        winner = winner_from_labels(rag_label=rag_label, baseline_label=baseline_label)
+        if winner == "Tie":
+            if judge.winner == "RAG":
+                winner = "RAG"
+            elif judge.winner == "Prompt-Only":
+                winner = "BASELINE"
+
+        return EvaluatorResult(
+            name="llm_judge",
+            status="completed",
+            rag_label=rag_label,
+            baseline_label=baseline_label,
+            winner=winner,
+            notes=f"confidence={judge.confidence}; winner_hint={judge.winner}",
+        )
+    except Exception as exc:
+        return _skipped_result("llm_judge", f"LLM judge unavailable: {exc}")
+
+
+def _evaluate_ragtruth(
+    rag_output: ModelOutput,
+    baseline_output: ModelOutput,
+    test_case: TestCase,
+    reference_ground_truth: str,
+    ragtruth_evaluator: Optional[RAGTruthEvaluator],
+) -> EvaluatorResult:
+    if ragtruth_evaluator is None:
+        return _skipped_result("ragtruth", "RAGTruth evaluator unavailable.")
+
+    try:
+        rag_result = ragtruth_evaluator.evaluate(
+            question=test_case.question,
+            response=rag_output.response,
+            ground_truth=reference_ground_truth,
+            retrieved_context="",
+            eval_context_mode="ground_truth",
+            verbose=False,
+        )
+        baseline_result = ragtruth_evaluator.evaluate(
+            question=test_case.question,
+            response=baseline_output.response,
+            ground_truth=reference_ground_truth,
+            retrieved_context="",
+            eval_context_mode="ground_truth",
+            verbose=False,
+        )
+
+        if rag_result.error or baseline_result.error:
+            return _skipped_result(
+                "ragtruth",
+                f"RAGTruth evaluation failed: {rag_result.error or baseline_result.error}",
+            )
+
+        rag_label = label_from_hallucination_flag(rag_result.has_hallucination)
+        baseline_label = label_from_hallucination_flag(baseline_result.has_hallucination)
+        return EvaluatorResult(
+            name="ragtruth",
+            status="completed",
+            rag_label=rag_label,
+            baseline_label=baseline_label,
+            rag_score=float(rag_result.hallucination_score),
+            baseline_score=float(baseline_result.hallucination_score),
+            winner=winner_from_labels(
+                rag_label=rag_label,
+                baseline_label=baseline_label,
+                rag_score=float(rag_result.hallucination_score),
+                baseline_score=float(baseline_result.hallucination_score),
+                lower_is_better=True,
+            ),
+            notes=f"RAG spans={rag_result.span_count}; BASELINE spans={baseline_result.span_count}",
+        )
+    except Exception as exc:
+        return _skipped_result("ragtruth", f"RAGTruth evaluation unavailable: {exc}")
+
+
+def _render_three_column_console_table(ground_truth: str, rag_output: str, baseline_output: str) -> str:
     terminal_width = shutil.get_terminal_size(fallback=(180, 24)).columns
     table_width = max(120, terminal_width)
-    inner_width = table_width - 4  # border + separators
+    inner_width = table_width - 4
     col_width = max(24, inner_width // 3)
 
-    # Keep exact table width aligned with computed columns.
-    table_width = (col_width * 3) + 4
-
-    def _wrap_cell(text: str) -> List[str]:
-        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-        paragraphs = [p for p in normalized.split("\n") if p.strip()] or [""]
+    def _wrap(text: str) -> List[str]:
         lines: List[str] = []
-        for paragraph in paragraphs:
-            wrapped = textwrap.wrap(
-                paragraph,
-                width=col_width,
-                break_long_words=True,
-                break_on_hyphens=False,
+        for paragraph in (text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+            paragraph = paragraph.strip()
+            if not paragraph:
+                continue
+            lines.extend(
+                textwrap.wrap(
+                    paragraph,
+                    width=col_width,
+                    break_long_words=True,
+                    break_on_hyphens=False,
+                )
+                or [""]
             )
-            lines.extend(wrapped or [""])
-        return lines
+        return lines or [""]
 
-    gt_lines = _wrap_cell(ground_truth)
-    rag_lines = _wrap_cell(rag_output)
-    prompt_lines = _wrap_cell(prompt_output)
-    row_count = max(len(gt_lines), len(rag_lines), len(prompt_lines))
+    gt_lines = _wrap(ground_truth)
+    rag_lines = _wrap(rag_output)
+    baseline_lines = _wrap(baseline_output)
+    row_count = max(len(gt_lines), len(rag_lines), len(baseline_lines))
+
+    border = "+" + ("-" * col_width) + "+" + ("-" * col_width) + "+" + ("-" * col_width) + "+"
 
     def _line(left: str, middle: str, right: str) -> str:
         return f"|{left.ljust(col_width)}|{middle.ljust(col_width)}|{right.ljust(col_width)}|"
 
-    border = (
-        "+"
-        + ("-" * col_width)
-        + "+"
-        + ("-" * col_width)
-        + "+"
-        + ("-" * col_width)
-        + "+"
-    )
-    header = _line("GROUND TRUTH", "RAG OUTPUT", "PROMPT-ONLY OUTPUT")
-
-    rows = [border, header, border]
+    rows = [border, _line("GROUND TRUTH", "RAG OUTPUT", "BASELINE OUTPUT"), border]
     for idx in range(row_count):
         rows.append(
             _line(
                 gt_lines[idx] if idx < len(gt_lines) else "",
                 rag_lines[idx] if idx < len(rag_lines) else "",
-                prompt_lines[idx] if idx < len(prompt_lines) else "",
+                baseline_lines[idx] if idx < len(baseline_lines) else "",
             )
         )
     rows.append(border)
     return "\n".join(rows)
 
 
-def test_rag_model(
-    test_case: TestCase,
-    reference_ground_truth: str,
-    rag_agent,
-    hallucination_model,
-    threshold: float = 0.5,
-    eval_context_mode: str = "ground_truth",
-    verbose: bool = True,
-) -> Dict[str, Any]:
-    """Test the Wikidata RAG agent on a single question."""
-    # Run agent with verbose=False to suppress detailed output
-    run = run_agent_with_capture(test_case.question, agent=rag_agent, verbose=False)
-
-    eval_result = evaluate_response(
-        response=run.final_answer,
-        ground_truth=reference_ground_truth,
-        retrieved_context=run.retrieved_context,
-        model=hallucination_model,
-        threshold=threshold,
-        eval_context_mode=eval_context_mode,
+def _print_case_console(case_result: CaseResult, index: int, total: int) -> None:
+    case = case_result.test_case
+    print(f"{Colors.BOLD}{'=' * 80}{Colors.RESET}")
+    print(
+        f"{Colors.BOLD}TEST {index}/{total}: {case.id} ({case.category}){Colors.RESET}"
     )
-
-    return {
-        "response": run.final_answer,
-        "retrieved_context": run.retrieved_context,
-        "sanitized_retrieved_context": run.sanitized_retrieved_context,
-        "score": eval_result["score"],
-        "is_hallucination": eval_result["is_hallucination"],
-    }
-
-
-def test_prompt_only_model(
-    test_case: TestCase,
-    reference_ground_truth: str,
-    prompt_llm,
-    hallucination_model,
-    threshold: float = 0.5,
-    eval_context_mode: str = "ground_truth",
-    verbose: bool = True,
-) -> Dict[str, Any]:
-    """Test the prompt-only agent on a single question."""
-    # Run with verbose=False to suppress detailed output
-    response = answer_question_prompt_only(
-        test_case.question,
-        llm=prompt_llm,
-        verbose=False,
-    )
-
-    # No retrieved context for prompt-only
-    eval_result = evaluate_response(
-        response=response,
-        ground_truth=reference_ground_truth,
-        retrieved_context="",  # No retrieval
-        model=hallucination_model,
-        threshold=threshold,
-        eval_context_mode=eval_context_mode,
-    )
-
-    return {
-        "response": response,
-        "score": eval_result["score"],
-        "is_hallucination": eval_result["is_hallucination"],
-    }
-
-
-def test_both_models(
-    test_case: TestCase,
-    rag_agent,
-    prompt_llm,
-    hallucination_model,
-    ragtruth_evaluator: Optional[RAGTruthEvaluator] = None,
-    aimon_evaluator: Optional[AimonEvaluator] = None,
-    threshold: float = 0.5,
-    eval_context_mode: str = "combined",
-    factual_mode: str = "ground_truth",
-    benchmark_axis: str = "dual_track",
-    ground_truth_style: str = "concise",
-    max_ground_truth_facts: Optional[int] = None,
-    include_ground_truth_aliases: bool = True,
-    compute_rag_faithfulness: bool = True,
-    use_llm_judge: bool = True,
-    use_ragtruth: bool = True,
-    use_aimon: bool = True,
-    verbose: bool = True,
-) -> ComparisonResult:
-    """
-    Run the same question through both models and compare results.
-
-    Console output is minimal - shows only question and scores.
-    Detailed information is saved to report files.
-    """
-    axis = (benchmark_axis or "dual_track").strip().lower()
-    if axis not in VALID_BENCHMARK_AXES:
-        axis = "dual_track"
-
-    factual_mode_norm = (factual_mode or "ground_truth").strip().lower()
-    if factual_mode_norm not in {"ground_truth", "combined"}:
-        factual_mode_norm = "ground_truth"
-
-    diagnostic_mode_norm = (eval_context_mode or "combined").strip().lower()
-    if diagnostic_mode_norm not in {"ground_truth", "combined"}:
-        diagnostic_mode_norm = "combined"
-
-    primary_context_mode = (
-        factual_mode_norm if axis == "dual_track" else diagnostic_mode_norm
-    )
-
-    # Test RAG model
-    reference_ground_truth = build_reference_ground_truth(
-        test_case=test_case,
-        ground_truth_style=ground_truth_style,
-        max_ground_truth_facts=max_ground_truth_facts,
-        include_aliases=include_ground_truth_aliases,
-    )
-
-    # Test RAG model
-    rag_result = test_rag_model(
-        test_case,
-        reference_ground_truth,
-        rag_agent,
-        hallucination_model,
-        threshold,
-        eval_context_mode=primary_context_mode,
-        verbose=False,
-    )
-
-    # Test Prompt-Only model
-    prompt_result = test_prompt_only_model(
-        test_case,
-        reference_ground_truth,
-        prompt_llm,
-        hallucination_model,
-        threshold,
-        eval_context_mode=primary_context_mode,
-        verbose=False,
-    )
-
-    # Primary reference context for factual-track evaluators
-    primary_eval_context = build_primary_context(
-        ground_truth=reference_ground_truth,
-        retrieved_context=rag_result["retrieved_context"],
-        eval_context_mode=primary_context_mode,
-    )
-
-    # Run LLM-as-a-judge evaluation if enabled
-    llm_judge_result = None
-    if use_llm_judge:
-        llm_judge_result = judge_responses(
-            question=test_case.question,
-            rag_response=rag_result["response"],
-            prompt_only_response=prompt_result["response"],
-            reference_context=primary_eval_context,
-            model=OPENAI_JUDGE_MODEL,
-            verbose=False,
+    print(f"{Colors.BOLD}{'=' * 80}{Colors.RESET}")
+    print(f"Question: {case.question}\n")
+    print(
+        _render_three_column_console_table(
+            case.ground_truth,
+            case_result.rag_output.response,
+            case_result.baseline_output.response,
         )
-
-    # Run RAGTruth evaluation if enabled
-    rag_ragtruth_result = None
-    prompt_only_ragtruth_result = None
-
-    if use_ragtruth and ragtruth_evaluator is not None:
-        # Evaluate RAG response
-        rag_ragtruth_result = ragtruth_evaluator.evaluate(
-            question=test_case.question,
-            response=rag_result["response"],
-            ground_truth=reference_ground_truth,
-            retrieved_context=rag_result["retrieved_context"],
-            eval_context_mode=primary_context_mode,
-            verbose=False,
-        )
-
-        # Evaluate Prompt-Only response
-        prompt_only_ragtruth_result = ragtruth_evaluator.evaluate(
-            question=test_case.question,
-            response=prompt_result["response"],
-            ground_truth=reference_ground_truth,
-            retrieved_context="",  # No retrieved context for prompt-only
-            eval_context_mode=primary_context_mode,
-            verbose=False,
-        )
-
-    # Run AIMon evaluation if enabled
-    rag_aimon_result = None
-    prompt_only_aimon_result = None
-
-    if use_aimon and aimon_evaluator is not None:
-        # AIMon is highly context-sensitive; use identical evaluation context for both
-        # models to avoid retrieval-context side effects in diagnostic comparisons.
-        aimon_context_mode = "ground_truth"
-
-        # Evaluate RAG response
-        rag_aimon_result = aimon_evaluator.evaluate_response(
-            question=test_case.question,
-            ground_truth=reference_ground_truth,
-            retrieved_context="",
-            response=rag_result["response"],
-            eval_context_mode=aimon_context_mode,
-        )
-
-        # Evaluate Prompt-Only response
-        prompt_only_aimon_result = aimon_evaluator.evaluate_response(
-            question=test_case.question,
-            ground_truth=reference_ground_truth,
-            retrieved_context="",  # No retrieved context for prompt-only
-            response=prompt_result["response"],
-            eval_context_mode=aimon_context_mode,
-        )
-
-    rag_faithfulness_score = None
-    rag_faithfulness_is_hallucination = None
-    rag_grounding_status = "unavailable"
-    rag_grounding_score = None
-    if compute_rag_faithfulness and _has_grounding_evidence(
-        rag_result["sanitized_retrieved_context"]
-    ):
-        rag_faithfulness_result = evaluate_rag_faithfulness(
-            response=rag_result["response"],
-            retrieved_context=rag_result["sanitized_retrieved_context"],
-            model=hallucination_model,
-            threshold=threshold,
-        )
-        if rag_faithfulness_result is not None:
-            rag_faithfulness_score = rag_faithfulness_result["score"]
-            rag_faithfulness_is_hallucination = rag_faithfulness_result[
-                "is_hallucination"
-            ]
-            rag_grounding_score = rag_faithfulness_score
-            rag_grounding_status = (
-                "non_faithful"
-                if rag_faithfulness_is_hallucination
-                else "faithful"
-            )
-
-    rag_factual_vectara = not rag_result["is_hallucination"]
-    prompt_factual_vectara = not prompt_result["is_hallucination"]
-
-    rag_factual_llm = None
-    prompt_factual_llm = None
-    rag_llm_completeness = None
-    prompt_llm_completeness = None
-    if llm_judge_result is not None and not llm_judge_result.error:
-        rag_factual_llm = not llm_judge_result.rag_has_factual_error
-        prompt_factual_llm = not llm_judge_result.prompt_has_factual_error
-        rag_llm_completeness = llm_judge_result.rag_completeness
-        prompt_llm_completeness = llm_judge_result.prompt_completeness
-
-        # Omission should affect completeness, not factual label.
-        if llm_judge_result.rag_has_factual_error and _is_omission_only_signal(
-            llm_judge_result.rag_hallucination_details
-        ):
-            rag_factual_llm = True
-            rag_llm_completeness = _merge_completeness(
-                rag_llm_completeness,
-                "partial",
-            )
-        if llm_judge_result.prompt_has_factual_error and _is_omission_only_signal(
-            llm_judge_result.prompt_hallucination_details
-        ):
-            prompt_factual_llm = True
-            prompt_llm_completeness = _merge_completeness(
-                prompt_llm_completeness,
-                "partial",
-            )
-
-    rag_factual_ragtruth = None
-    prompt_factual_ragtruth = None
-    rag_rt_completeness = None
-    prompt_rt_completeness = None
-    if rag_ragtruth_result is not None:
-        rag_rt_dual = interpret_ragtruth_for_dual_track(rag_ragtruth_result)
-        rag_factual_ragtruth = not rag_rt_dual["has_factual_error"]
-        rag_rt_completeness = rag_rt_dual["completeness"]
-    if prompt_only_ragtruth_result is not None:
-        prompt_rt_dual = interpret_ragtruth_for_dual_track(prompt_only_ragtruth_result)
-        prompt_factual_ragtruth = not prompt_rt_dual["has_factual_error"]
-        prompt_rt_completeness = prompt_rt_dual["completeness"]
-
-    rag_factual_consensus, rag_disagreement = _consensus_factual(
-        vectara_vote=rag_factual_vectara,
-        llm_vote=rag_factual_llm,
-        ragtruth_vote=rag_factual_ragtruth,
     )
-    prompt_factual_consensus, prompt_disagreement = _consensus_factual(
-        vectara_vote=prompt_factual_vectara,
-        llm_vote=prompt_factual_llm,
-        ragtruth_vote=prompt_factual_ragtruth,
-    )
+    print()
 
-    rag_completeness = _merge_completeness(rag_llm_completeness, rag_rt_completeness)
-    prompt_completeness = _merge_completeness(
-        prompt_llm_completeness,
-        prompt_rt_completeness,
-    )
-
-    return ComparisonResult(
-        question=test_case.question,
-        description=test_case.description,
-        ground_truth=reference_ground_truth,
-        analysis_version="v2_dual_track" if axis == "dual_track" else "v1_legacy",
-        benchmark_axis=axis,
-        evaluation_mode=primary_context_mode,
-        factual_mode=factual_mode_norm,
-        diagnostic_mode=diagnostic_mode_norm,
-        # RAG results
-        rag_response=rag_result["response"],
-        rag_retrieved_context=rag_result["retrieved_context"],
-        rag_score=rag_result["score"],
-        rag_is_hallucination=rag_result["is_hallucination"],
-        # Prompt-only results
-        prompt_only_response=prompt_result["response"],
-        prompt_only_score=prompt_result["score"],
-        prompt_only_is_hallucination=prompt_result["is_hallucination"],
-        rag_faithfulness_score=rag_faithfulness_score,
-        rag_faithfulness_is_hallucination=rag_faithfulness_is_hallucination,
-        rag_grounding_status=rag_grounding_status,
-        rag_grounding_score=rag_grounding_score,
-        rag_factual_vectara=rag_factual_vectara,
-        rag_factual_llm=rag_factual_llm,
-        rag_factual_ragtruth=rag_factual_ragtruth,
-        prompt_factual_vectara=prompt_factual_vectara,
-        prompt_factual_llm=prompt_factual_llm,
-        prompt_factual_ragtruth=prompt_factual_ragtruth,
-        rag_factual_consensus=rag_factual_consensus,
-        prompt_factual_consensus=prompt_factual_consensus,
-        rag_completeness=rag_completeness,
-        prompt_completeness=prompt_completeness,
-        rag_factual_disagreement_rate=rag_disagreement,
-        prompt_factual_disagreement_rate=prompt_disagreement,
-        # LLM Judge results
-        llm_judge_result=llm_judge_result,
-        # RAGTruth results
-        rag_ragtruth_result=rag_ragtruth_result,
-        prompt_only_ragtruth_result=prompt_only_ragtruth_result,
-        # AIMon results
-        rag_aimon_result=rag_aimon_result,
-        prompt_only_aimon_result=prompt_only_aimon_result,
-    )
+    for evaluator in EVALUATOR_ORDER:
+        result = case_result.evaluations[evaluator]
+        name = evaluator.upper() if evaluator != "llm_judge" else "LLM_JUDGE"
+        print(f"{Colors.BOLD}{name}:{Colors.RESET}")
+        print(f"  status: {result.status}")
+        print(f"  RAG:      label={result.rag_label}, score={result.rag_score}")
+        print(
+            f"  BASELINE: label={result.baseline_label}, score={result.baseline_score}"
+        )
+        print(f"  winner:   {result.winner}")
+        if result.notes:
+            print(f"  notes:    {result.notes}")
+        print()
 
 
-# ==========================================================================
-# Test Suite Runner
-# ==========================================================================
+def _init_summary() -> Dict[str, Dict[str, int]]:
+    summary: Dict[str, Dict[str, int]] = {}
+    for evaluator in EVALUATOR_ORDER:
+        summary[evaluator] = {
+            "rag_wins": 0,
+            "baseline_wins": 0,
+            "ties": 0,
+            "rag_factual": 0,
+            "rag_hallucinated": 0,
+            "baseline_factual": 0,
+            "baseline_hallucinated": 0,
+            "skipped": 0,
+            "errors": 0,
+        }
+    return summary
+
+
+def _compute_evaluator_summary(cases: List[CaseResult]) -> Dict[str, Dict[str, int]]:
+    summary = _init_summary()
+
+    for case_result in cases:
+        for evaluator in EVALUATOR_ORDER:
+            result = case_result.evaluations[evaluator]
+            row = summary[evaluator]
+
+            if result.status == "completed":
+                if result.rag_label == "factual":
+                    row["rag_factual"] += 1
+                elif result.rag_label == "hallucinated":
+                    row["rag_hallucinated"] += 1
+
+                if result.baseline_label == "factual":
+                    row["baseline_factual"] += 1
+                elif result.baseline_label == "hallucinated":
+                    row["baseline_hallucinated"] += 1
+
+                if result.winner == "RAG":
+                    row["rag_wins"] += 1
+                elif result.winner == "BASELINE":
+                    row["baseline_wins"] += 1
+                elif result.winner == "Tie":
+                    row["ties"] += 1
+            elif result.status == "skipped":
+                row["skipped"] += 1
+            else:
+                row["errors"] += 1
+
+    return summary
 
 
 def run_comparison_suite(
     test_cases: Optional[List[TestCase]] = None,
     threshold: float = 0.5,
-    eval_context_mode: str = "combined",
-    factual_mode: str = "ground_truth",
-    benchmark_axis: str = "dual_track",
-    ground_truth_style: str = "concise",
-    max_ground_truth_facts: Optional[int] = None,
-    include_ground_truth_aliases: bool = True,
-    benchmark_temperature: float = 0.0,
-    compute_rag_faithfulness: bool = True,
-    use_llm_judge: bool = True,
-    use_ragtruth: bool = True,
-    use_aimon: bool = True,
+    temperature: float = 0.0,
     verbose: bool = True,
-) -> List[ComparisonResult]:
-    """
-    Run the full comparison test suite.
+) -> SuiteResult:
+    """Run benchmark suite in legacy-simple mode."""
+    cases_to_run = test_cases or GROUND_TRUTH_TEST_CASES
 
-    Console output is minimal - shows only:
-    - Current question (truncated)
-    - RAG Score
-    - Prompt-Only Score
-    - RAGTruth Decision (if enabled)
-    - AIMon Decision (if enabled)
+    if verbose:
+        print("Loading benchmark runtime...")
 
-    Detailed information is saved to report files.
-    """
-    if test_cases is None:
-        test_cases = GROUND_TRUTH_TEST_CASES
-
-    print("Loading models...")
-
-    # Load models once
     hallucination_model = load_hallucination_model()
-    rag_agent = build_agent(temperature=benchmark_temperature)
-    prompt_llm = build_prompt_only_agent(temperature=benchmark_temperature)
+    rag_agent = build_agent(temperature=temperature)
+    baseline_agent = build_prompt_only_agent(temperature=temperature)
 
-    # Load RAGTruth evaluator if enabled
-    ragtruth_evaluator = None
-    if use_ragtruth:
-        ragtruth_evaluator = RAGTruthEvaluator(
-            model_name=RAGTRUTH_MODEL,
-            strict_mode=False,
+    ragtruth_evaluator: Optional[RAGTruthEvaluator] = None
+    try:
+        ragtruth_evaluator = RAGTruthEvaluator(model_name=RAGTRUTH_MODEL, strict_mode=False)
+    except Exception:
+        ragtruth_evaluator = None
+
+    aimon_evaluator: Optional[AimonEvaluator] = None
+    try:
+        aimon_evaluator = AimonEvaluator(threshold=threshold)
+        aimon_evaluator.load_model()
+    except Exception:
+        aimon_evaluator = None
+
+    case_results: List[CaseResult] = []
+
+    for index, test_case in enumerate(cases_to_run, 1):
+        reference_ground_truth = build_reference_ground_truth(
+            test_case,
+            include_aliases=True,
         )
 
-    # Load AIMon evaluator if enabled
-    aimon_evaluator = None
-    if use_aimon:
+        rag_error = ""
+        baseline_error = ""
+
         try:
-            aimon_evaluator = AimonEvaluator(threshold=threshold)
-            aimon_evaluator.load_model()
-        except ImportError:
-            print("Warning: hdm2 package not installed. AIMon evaluation disabled.")
-            use_aimon = False
-
-    if use_llm_judge:
-        if not os.environ.get("OPENAI_API_KEY"):
-            print(
-                "Warning: --llm-judge requested but OPENAI_API_KEY is not set. "
-                "LLM Judge evaluation disabled."
+            rag_run = run_agent_with_capture(
+                question=test_case.question,
+                agent=rag_agent,
+                verbose=False,
             )
-            use_llm_judge = False
+            rag_output = _to_model_output(
+                response=rag_run.final_answer,
+                retrieved_context=rag_run.retrieved_context,
+                tool_calls=rag_run.tool_calls,
+            )
+        except Exception as exc:
+            rag_error = str(exc)
+            rag_output = _to_model_output(response=f"Error: {exc}")
 
-    print(f"Running {len(test_cases)} test cases...\n")
-    normalized_gt_style = (ground_truth_style or "concise").strip().lower()
-    if normalized_gt_style not in VALID_GROUND_TRUTH_STYLES:
-        normalized_gt_style = "concise"
-    axis = (benchmark_axis or "dual_track").strip().lower()
-    if axis not in VALID_BENCHMARK_AXES:
-        axis = "dual_track"
+        try:
+            baseline_response = answer_question_prompt_only(
+                test_case.question,
+                llm=baseline_agent,
+                verbose=False,
+            )
+            baseline_output = _to_model_output(response=baseline_response)
+        except Exception as exc:
+            baseline_error = str(exc)
+            baseline_output = _to_model_output(response=f"Error: {exc}")
 
-    print(f"Benchmark axis: {axis}")
-    print(f"Primary factual mode: {factual_mode}")
-    print(f"Diagnostic context mode: {eval_context_mode}")
-    print(f"Ground-truth style: {normalized_gt_style}")
-    if normalized_gt_style == "rich" and max_ground_truth_facts:
-        print(f"Ground-truth fact cap: {max_ground_truth_facts}")
-    print(f"Benchmark temperature: {benchmark_temperature}\n")
+        if rag_error or baseline_error:
+            reason = "Model execution failed"
+            details = "; ".join(part for part in [rag_error, baseline_error] if part)
+            evals = {
+                evaluator: _error_result(evaluator, f"{reason}: {details}")
+                for evaluator in EVALUATOR_ORDER
+            }
+        else:
+            evals = {
+                "vectara": _evaluate_vectara(
+                    rag_output=rag_output,
+                    baseline_output=baseline_output,
+                    reference_ground_truth=reference_ground_truth,
+                    threshold=threshold,
+                    hallucination_model=hallucination_model,
+                ),
+                "aimon": _evaluate_aimon(
+                    rag_output=rag_output,
+                    baseline_output=baseline_output,
+                    test_case=test_case,
+                    reference_ground_truth=reference_ground_truth,
+                    aimon_evaluator=aimon_evaluator,
+                ),
+                "llm_judge": _evaluate_llm_judge(
+                    rag_output=rag_output,
+                    baseline_output=baseline_output,
+                    test_case=test_case,
+                    reference_ground_truth=reference_ground_truth,
+                ),
+                "ragtruth": _evaluate_ragtruth(
+                    rag_output=rag_output,
+                    baseline_output=baseline_output,
+                    test_case=test_case,
+                    reference_ground_truth=reference_ground_truth,
+                    ragtruth_evaluator=ragtruth_evaluator,
+                ),
+            }
 
-    results: List[ComparisonResult] = []
-
-    for i, test_case in enumerate(test_cases, 1):
-        result = test_both_models(
+        case_result = CaseResult(
             test_case=test_case,
-            rag_agent=rag_agent,
-            prompt_llm=prompt_llm,
-            hallucination_model=hallucination_model,
-            ragtruth_evaluator=ragtruth_evaluator,
-            aimon_evaluator=aimon_evaluator,
-            threshold=threshold,
-            eval_context_mode=eval_context_mode,
-            factual_mode=factual_mode,
-            benchmark_axis=axis,
-            ground_truth_style=normalized_gt_style,
-            max_ground_truth_facts=max_ground_truth_facts,
-            include_ground_truth_aliases=include_ground_truth_aliases,
-            compute_rag_faithfulness=compute_rag_faithfulness,
-            use_llm_judge=use_llm_judge,
-            use_ragtruth=use_ragtruth,
-            use_aimon=use_aimon,
-            verbose=verbose,
+            rag_output=rag_output,
+            baseline_output=baseline_output,
+            evaluations=evals,
         )
-        results.append(result)
+        case_results.append(case_result)
 
-        # Block-style console output
+        if verbose:
+            _print_case_console(case_result, index=index, total=len(cases_to_run))
+
+    summary = _compute_evaluator_summary(case_results)
+
+    if verbose:
         print(f"{Colors.BOLD}{'=' * 80}{Colors.RESET}")
-        print(
-            f"{Colors.BOLD}TEST {i}/{len(test_cases)}: {test_case.description}{Colors.RESET}"
-        )
+        print(f"{Colors.BOLD}HEAD-TO-HEAD SUMMARY{Colors.RESET}")
         print(f"{Colors.BOLD}{'=' * 80}{Colors.RESET}")
-        print(f"Question: {test_case.question}")
-        print()
-        print(
-            _render_three_column_console_table(
-                result.ground_truth,
-                result.rag_response,
-                result.prompt_only_response,
-            )
-        )
-        print()
-
-        # Vectara results
-        rag_status = (
-            f"{Colors.RED}❌ HALLUC{Colors.RESET}"
-            if result.rag_is_hallucination
-            else f"{Colors.GREEN}✅ FACTUAL{Colors.RESET}"
-        )
-        prompt_status = (
-            f"{Colors.RED}❌ HALLUC{Colors.RESET}"
-            if result.prompt_only_is_hallucination
-            else f"{Colors.GREEN}✅ FACTUAL{Colors.RESET}"
-        )
-        print(f"{Colors.BOLD}VECTARA:{Colors.RESET}")
-        print(f"  RAG:    {result.rag_score:.3f} {rag_status}")
-        print(f"  Prompt: {result.prompt_only_score:.3f} {prompt_status}")
-        print(f"  Winner: {result.winner}")
-        if result.benchmark_axis == "dual_track":
-            print(f"{Colors.BOLD}DUAL-TRACK:{Colors.RESET}")
-            rag_fact = "FACTUAL" if result.rag_factual_consensus else "FACTUAL-ERROR"
-            prompt_fact = (
-                "FACTUAL" if result.prompt_factual_consensus else "FACTUAL-ERROR"
-            )
+        for evaluator in EVALUATOR_ORDER:
+            row = summary[evaluator]
             print(
-                f"  Factual: RAG={rag_fact} Prompt={prompt_fact} → {result.factual_winner}"
+                f"{evaluator}: RAG={row['rag_wins']} BASELINE={row['baseline_wins']} "
+                f"Tie={row['ties']} skipped={row['skipped']} errors={row['errors']}"
             )
-            print(
-                f"  Completeness: RAG={result.rag_completeness} Prompt={result.prompt_completeness}"
-            )
-            print(
-                f"  Disagreement: RAG={result.rag_factual_disagreement_rate:.2f} Prompt={result.prompt_factual_disagreement_rate:.2f}"
-                if result.rag_factual_disagreement_rate is not None
-                and result.prompt_factual_disagreement_rate is not None
-                else "  Disagreement: N/A"
-            )
-        if result.rag_faithfulness_score is not None:
-            faith_status = (
-                f"{Colors.RED}❌ HALLUC{Colors.RESET}"
-                if result.rag_faithfulness_is_hallucination
-                else f"{Colors.GREEN}✅ FACTUAL{Colors.RESET}"
-            )
-            print(
-                f"  RAG Faithfulness: {result.rag_faithfulness_score:.3f} {faith_status}"
-            )
-        elif result.benchmark_axis == "dual_track":
-            print("  RAG Faithfulness: unavailable (no usable retrieved evidence)")
 
-        # RAGTruth results
-        if result.rag_ragtruth_result is not None:
-            rag_rt = result.rag_ragtruth_result
-            prompt_rt = result.prompt_only_ragtruth_result
-            rag_rt_status = (
-                f"{Colors.RED}❌ HALLUC{Colors.RESET}"
-                if rag_rt.has_hallucination
-                else f"{Colors.GREEN}✅ FACTUAL{Colors.RESET}"
-            )
-            prompt_rt_status = (
-                f"{Colors.RED}❌ HALLUC{Colors.RESET}"
-                if (prompt_rt and prompt_rt.has_hallucination)
-                else f"{Colors.GREEN}✅ FACTUAL{Colors.RESET}"
-            )
-            print()
-            print(f"{Colors.BOLD}RAGTRUTH:{Colors.RESET}")
-            print(
-                f"  RAG:    score={rag_rt.hallucination_score:.3f}, spans={rag_rt.span_count} {rag_rt_status}"
-            )
-            if prompt_rt:
-                print(
-                    f"  Prompt: score={prompt_rt.hallucination_score:.3f}, spans={prompt_rt.span_count} {prompt_rt_status}"
-                )
-            print(f"  Winner: {result.ragtruth_winner}")
-
-        # AIMon results
-        if result.rag_aimon_result is not None:
-            rag_am = result.rag_aimon_result
-            prompt_am = result.prompt_only_aimon_result
-            rag_am_status = (
-                f"{Colors.RED}❌ HALLUC{Colors.RESET}"
-                if rag_am.has_hallucination
-                else f"{Colors.GREEN}✅ FACTUAL{Colors.RESET}"
-            )
-            prompt_am_status = (
-                f"{Colors.RED}❌ HALLUC{Colors.RESET}"
-                if (prompt_am and prompt_am.has_hallucination)
-                else f"{Colors.GREEN}✅ FACTUAL{Colors.RESET}"
-            )
-            print()
-            print(f"{Colors.BOLD}AIMON HDM-2:{Colors.RESET}")
-            print(
-                f"  RAG:    severity={rag_am.hallucination_severity:.3f}, sentences={len(rag_am.hallucinated_sentences)} {rag_am_status}"
-            )
-            if prompt_am:
-                print(
-                    f"  Prompt: severity={prompt_am.hallucination_severity:.3f}, sentences={len(prompt_am.hallucinated_sentences)} {prompt_am_status}"
-                )
-            print(f"  Winner: {result.aimon_winner}")
-
-        # LLM Judge results
-        if result.llm_judge_result is not None:
-            judge = result.llm_judge_result
-            print()
-            print(f"{Colors.BOLD}LLM JUDGE ({OPENAI_JUDGE_MODEL}):{Colors.RESET}")
-            if judge.error:
-                print(f"  Error: {judge.error}")
-            else:
-                rag_status = (
-                    f"{Colors.RED}❌ HALLUC{Colors.RESET}"
-                    if judge.rag_has_factual_error
-                    else f"{Colors.GREEN}✅ FACTUAL{Colors.RESET}"
-                )
-                prompt_status = (
-                    f"{Colors.RED}❌ HALLUC{Colors.RESET}"
-                    if judge.prompt_has_factual_error
-                    else f"{Colors.GREEN}✅ FACTUAL{Colors.RESET}"
-                )
-                print(f"  RAG:    {rag_status}")
-                print(
-                    f"    completeness={judge.rag_completeness}, missing={judge.rag_missing_required_info or 'None'}"
-                )
-                print(f"  Prompt: {prompt_status}")
-                print(
-                    f"    completeness={judge.prompt_completeness}, missing={judge.prompt_missing_required_info or 'None'}"
-                )
-                print(f"  Winner: {result.llm_judge_winner} ({judge.confidence})")
-
-        print()
-
-    print("=" * 80)
-    print(f"BENCHMARK COMPLETE: {len(results)} tests run")
-    print("=" * 80)
-
-    return results
+    return SuiteResult(
+        analysis_version=ANALYSIS_VERSION,
+        threshold=threshold,
+        temperature=temperature,
+        cases=case_results,
+        evaluator_summary=summary,
+    )

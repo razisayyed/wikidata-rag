@@ -7,6 +7,7 @@ from kb_project.tools.wikidata_sparql import (
     is_safe_read_only_select,
     MAX_SPARQL_ROWS,
 )
+from kb_project.wikidata.properties import WIKIDATA_PROPERTIES
 
 
 def test_wikidata_sparql_accepts_prefix_select():
@@ -99,3 +100,9 @@ def test_fetch_entity_properties_temporal_alias_normalization_for_wwii():
     )
     assert "Government Code and Cypher School (GC&CS)" in output
     assert "historical alias normalization" in output
+
+
+def test_property_catalog_includes_core_physical_quantity_properties():
+    # Needed for current benchmark coverage (boiling point and speed questions).
+    assert "P2102" in WIKIDATA_PROPERTIES  # boiling point
+    assert "P2052" in WIKIDATA_PROPERTIES  # speed

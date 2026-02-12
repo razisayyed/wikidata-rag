@@ -9,6 +9,7 @@ _STATE_LOCK = Lock()
 _ALLOWED_QIDS: Set[str] = set()
 _QID_TO_ENTITY: Dict[str, str] = {}
 _SPARQL_ATTEMPTED = False
+_QUESTION_CONTEXT = ""
 
 
 def reset_tool_protocol_state() -> None:
@@ -18,6 +19,8 @@ def reset_tool_protocol_state() -> None:
         _QID_TO_ENTITY.clear()
         global _SPARQL_ATTEMPTED
         _SPARQL_ATTEMPTED = False
+        global _QUESTION_CONTEXT
+        _QUESTION_CONTEXT = ""
 
 
 def register_search_candidates(
@@ -65,3 +68,16 @@ def has_sparql_attempt() -> bool:
     """Return whether wikidata_sparql was attempted in the current run."""
     with _STATE_LOCK:
         return _SPARQL_ATTEMPTED
+
+
+def set_question_context(question: str) -> None:
+    """Store the current user question for intent-aware tool behavior."""
+    with _STATE_LOCK:
+        global _QUESTION_CONTEXT
+        _QUESTION_CONTEXT = (question or "").strip()
+
+
+def get_question_context() -> str:
+    """Return the current user question for this run."""
+    with _STATE_LOCK:
+        return _QUESTION_CONTEXT

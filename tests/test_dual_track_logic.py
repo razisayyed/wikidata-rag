@@ -1,79 +1,79 @@
 from __future__ import annotations
 
-import pytest
-
-from kb_project.benchmark.ragtruth import (
-    RAGTruthResult,
-    interpret_ragtruth_for_dual_track,
+from kb_project.benchmark.models import (
+    CaseResult,
+    EvaluatorResult,
+    ModelOutput,
+    TestCase,
+    winner_from_labels,
 )
-from kb_project.benchmark.runner import (
-    _consensus_factual,
-    _has_grounding_evidence,
-    _is_omission_only_signal,
-)
+from kb_project.benchmark.runner import _compute_evaluator_summary
 
 
-def test_consensus_factual_majority_vote():
-    consensus, disagreement = _consensus_factual(
-        vectara_vote=True,
-        llm_vote=False,
-        ragtruth_vote=True,
+def test_winner_resolution_is_local_to_single_evaluator():
+    assert winner_from_labels("factual", "hallucinated") == "RAG"
+    assert winner_from_labels("hallucinated", "factual") == "BASELINE"
+    assert winner_from_labels("factual", "factual") == "Tie"
+
+
+def test_summary_keeps_evaluators_independent():
+    case = CaseResult(
+        test_case=TestCase(
+            id="case_x",
+            question="Q",
+            ground_truth="A",
+            category="test",
+        ),
+        rag_output=ModelOutput(response="A"),
+        baseline_output=ModelOutput(response="B"),
+        evaluations={
+            "vectara": EvaluatorResult(
+                name="vectara",
+                status="completed",
+                rag_label="factual",
+                baseline_label="hallucinated",
+                winner="RAG",
+            ),
+            "aimon": EvaluatorResult(
+                name="aimon",
+                status="completed",
+                rag_label="hallucinated",
+                baseline_label="factual",
+                winner="BASELINE",
+            ),
+            "llm_judge": EvaluatorResult(
+                name="llm_judge",
+                status="completed",
+                rag_label="factual",
+                baseline_label="factual",
+                winner="Tie",
+            ),
+            "ragtruth": EvaluatorResult(
+                name="ragtruth",
+                status="skipped",
+                rag_label="skipped",
+                baseline_label="skipped",
+                winner="N/A",
+            ),
+        },
     )
-    assert consensus is True
-    assert disagreement == pytest.approx(1 / 3)
+
+    summary = _compute_evaluator_summary([case])
+
+    assert summary["vectara"]["rag_wins"] == 1
+    assert summary["vectara"]["baseline_wins"] == 0
+
+    assert summary["aimon"]["baseline_wins"] == 1
+    assert summary["aimon"]["rag_wins"] == 0
+
+    assert summary["llm_judge"]["ties"] == 1
+    assert summary["ragtruth"]["skipped"] == 1
 
 
-def test_consensus_factual_tie_resolves_via_llm_vote():
-    consensus, disagreement = _consensus_factual(
-        vectara_vote=True,
-        llm_vote=False,
-        ragtruth_vote=None,
-    )
-    assert consensus is False
-    assert disagreement == pytest.approx(0.5)
+def test_runner_source_no_longer_contains_dual_track_fields():
+    with open("kb_project/benchmark/runner.py", "r", encoding="utf-8") as source_file:
+        source = source_file.read()
 
-
-def test_consensus_factual_no_votes_returns_none():
-    consensus, disagreement = _consensus_factual(
-        vectara_vote=None,
-        llm_vote=None,
-        ragtruth_vote=None,
-    )
-    assert consensus is None
-    assert disagreement is None
-
-
-def test_omission_signal_detected_without_marking_contradiction():
-    assert _is_omission_only_signal("The answer omits the requested atomic counts.")
-    assert not _is_omission_only_signal("The answer is false and contradicts the source.")
-
-
-def test_ragtruth_omission_maps_to_partial_not_factual_error():
-    result = RAGTruthResult(
-        has_hallucination=True,
-        hallucination_score=0.4,
-        analysis="The response omits the required birth date.",
-    )
-    interpreted = interpret_ragtruth_for_dual_track(result)
-    assert interpreted["has_factual_error"] is False
-    assert interpreted["completeness"] == "partial"
-
-
-def test_ragtruth_contradiction_maps_to_factual_error():
-    result = RAGTruthResult(
-        has_hallucination=True,
-        hallucination_score=0.9,
-        analysis="The response contains a false claim that contradicts the source.",
-    )
-    interpreted = interpret_ragtruth_for_dual_track(result)
-    assert interpreted["has_factual_error"] is True
-    assert interpreted["completeness"] == "insufficient"
-
-
-def test_grounding_evidence_detection_unavailable_for_no_candidates():
-    assert not _has_grounding_evidence(
-        "[Tool: search_entity_candidates]\nNO CANDIDATES FOUND for Unknown Entity"
-    )
-    assert _has_grounding_evidence(
-        "[Tool: fetch_entity_properties]\nP31: instance of - human"
-    )
+    assert "dual_track" not in source
+    assert "consensus" not in source
+    assert "rag_completeness" not in source

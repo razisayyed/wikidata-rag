@@ -1,33 +1,16 @@
-"""
-Data Models for Benchmark Module
-================================
-Contains data structures used across the benchmark system.
-"""
+"""Minimal data models for the legacy-simple benchmark pipeline."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional
-
-if TYPE_CHECKING:
-    from .aimon import AimonResult
-    from .llm_judge import JudgeResult
-    from .ragtruth import RAGTruthResult
-else:
-    AimonResult = Any
-    JudgeResult = Any
-    RAGTruthResult = Any
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 AIMON_WINNER_EPSILON = 0.05
-
-
-# ==========================================================================
-# Color Constants for Terminal Output
-# ==========================================================================
+ANALYSIS_VERSION = "v1_legacy_simple"
 
 
 class Colors:
-    """ANSI color codes for terminal output"""
+    """ANSI color codes for terminal output."""
 
     MAGENTA = "\033[95m"
     RED = "\033[91m"
@@ -36,184 +19,98 @@ class Colors:
     RESET = "\033[0m"
 
 
-# ==========================================================================
-# Data Structures
-# ==========================================================================
+@dataclass
+class TestCase:
+    """Single benchmark test case."""
+
+    __test__ = False
+
+    id: str
+    question: str
+    ground_truth: str
+    category: str
+    refusal_expected: bool = False
+    accepted_aliases: List[List[str]] = field(default_factory=list)
 
 
 @dataclass
-class ComparisonResult:
-    """Holds results from testing both models on the same question."""
+class ModelOutput:
+    """Model output captured for a case."""
 
-    # Benchmark meta
-    question: str
-    description: str
-    ground_truth: str
-    analysis_version: str = "v2_dual_track"
-    benchmark_axis: str = "dual_track"
-    evaluation_mode: str = "ground_truth"
-    factual_mode: str = "ground_truth"
-    diagnostic_mode: str = "combined"
+    response: str
+    retrieved_context: str = ""
+    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
 
-    # RAG model results
-    rag_response: str = ""
-    rag_retrieved_context: str = ""
-    rag_score: float = 0.0
-    rag_is_hallucination: bool = False
 
-    # Prompt-only model results
-    prompt_only_response: str = ""
-    prompt_only_score: float = 0.0
-    prompt_only_is_hallucination: bool = False
+@dataclass
+class EvaluatorResult:
+    """Normalized output for one evaluator."""
 
-    # Secondary RAG-only grounding signal
-    rag_faithfulness_score: Optional[float] = None
-    rag_faithfulness_is_hallucination: Optional[bool] = None
-    rag_grounding_status: str = "unavailable"  # faithful|non_faithful|unavailable
-    rag_grounding_score: Optional[float] = None
+    name: str
+    status: str  # completed | skipped | error
+    rag_label: str = "error"  # factual | hallucinated | skipped | error
+    baseline_label: str = "error"
+    rag_score: Optional[float] = None
+    baseline_score: Optional[float] = None
+    winner: str = "N/A"  # RAG | BASELINE | Tie | N/A
+    notes: str = ""
 
-    # Per-evaluator factual labels
-    rag_factual_vectara: Optional[bool] = None
-    rag_factual_llm: Optional[bool] = None
-    rag_factual_ragtruth: Optional[bool] = None
-    prompt_factual_vectara: Optional[bool] = None
-    prompt_factual_llm: Optional[bool] = None
-    prompt_factual_ragtruth: Optional[bool] = None
 
-    # Consensus factual labels
-    rag_factual_consensus: Optional[bool] = None
-    prompt_factual_consensus: Optional[bool] = None
+@dataclass
+class CaseResult:
+    """Complete benchmark result for one case."""
 
-    # Completeness labels
-    rag_completeness: str = "insufficient"
-    prompt_completeness: str = "insufficient"
+    test_case: TestCase
+    rag_output: ModelOutput
+    baseline_output: ModelOutput
+    evaluations: Dict[str, EvaluatorResult]
 
-    # Disagreement rates
-    rag_factual_disagreement_rate: Optional[float] = None
-    prompt_factual_disagreement_rate: Optional[float] = None
 
-    # LLM Judge results (optional, may be None if not run)
-    llm_judge_result: Optional[JudgeResult] = None
+@dataclass
+class SuiteResult:
+    """Complete benchmark suite result."""
 
-    # RAGTruth results (optional, may be None if not run)
-    rag_ragtruth_result: Optional[RAGTruthResult] = None
-    prompt_only_ragtruth_result: Optional[RAGTruthResult] = None
+    analysis_version: str
+    threshold: float
+    temperature: float
+    cases: List[CaseResult]
+    evaluator_summary: Dict[str, Dict[str, int]]
 
-    # AIMon results (optional, may be None if not run)
-    rag_aimon_result: Optional[AimonResult] = None
-    prompt_only_aimon_result: Optional[AimonResult] = None
 
-    @property
-    def factual_winner(self) -> str:
-        """Winner according to factual-consensus track."""
-        rag = self.rag_factual_consensus
-        prompt = self.prompt_factual_consensus
-        if rag is None or prompt is None:
-            return "N/A"
-        if rag and not prompt:
-            return "RAG"
-        if prompt and not rag:
-            return "Prompt-Only"
+# Backward-compat alias for old code paths that still refer to ComparisonResult.
+ComparisonResult = CaseResult
+
+
+def label_from_hallucination_flag(is_hallucination: bool) -> str:
+    return "hallucinated" if is_hallucination else "factual"
+
+
+def winner_from_labels(
+    rag_label: str,
+    baseline_label: str,
+    rag_score: Optional[float] = None,
+    baseline_score: Optional[float] = None,
+    lower_is_better: bool = False,
+    epsilon: float = 0.0,
+) -> str:
+    """Resolve per-evaluator winner from labels and optional scores."""
+    if rag_label not in {"factual", "hallucinated"}:
+        return "N/A"
+    if baseline_label not in {"factual", "hallucinated"}:
+        return "N/A"
+
+    if rag_label == "factual" and baseline_label == "hallucinated":
+        return "RAG"
+    if rag_label == "hallucinated" and baseline_label == "factual":
+        return "BASELINE"
+
+    if rag_score is None or baseline_score is None:
         return "Tie"
 
-    @property
-    def winner(self) -> str:
-        """Backward-compatible winner property (factual consensus first)."""
-        if self.factual_winner != "N/A":
-            if self.factual_winner != "Tie":
-                return self.factual_winner
-            if self.rag_score > self.prompt_only_score:
-                return "RAG"
-            if self.prompt_only_score > self.rag_score:
-                return "Prompt-Only"
-            return "Tie"
-
-        # Legacy fallback
-        if self.rag_is_hallucination and not self.prompt_only_is_hallucination:
-            return "Prompt-Only"
-        if not self.rag_is_hallucination and self.prompt_only_is_hallucination:
-            return "RAG"
-        if self.rag_score > self.prompt_only_score:
-            return "RAG"
-        if self.prompt_only_score > self.rag_score:
-            return "Prompt-Only"
+    diff = abs(rag_score - baseline_score)
+    if diff <= epsilon:
         return "Tie"
 
-    @property
-    def llm_judge_winner(self) -> str:
-        """Winner according to LLM judge."""
-        if self.llm_judge_result is None:
-            return "N/A"
-        if self.llm_judge_result.error:
-            return "Error"
-        return self.llm_judge_result.winner
-
-    @property
-    def ragtruth_winner(self) -> str:
-        """Winner according to RAGTruth evaluation."""
-        if self.rag_ragtruth_result is None or self.prompt_only_ragtruth_result is None:
-            return "N/A"
-
-        rag_halluc = self.rag_ragtruth_result.has_hallucination
-        prompt_halluc = self.prompt_only_ragtruth_result.has_hallucination
-
-        if rag_halluc and not prompt_halluc:
-            return "Prompt-Only"
-        if not rag_halluc and prompt_halluc:
-            return "RAG"
-        if not rag_halluc and not prompt_halluc:
-            if (
-                self.rag_ragtruth_result.hallucination_score
-                < self.prompt_only_ragtruth_result.hallucination_score
-            ):
-                return "RAG"
-            if (
-                self.prompt_only_ragtruth_result.hallucination_score
-                < self.rag_ragtruth_result.hallucination_score
-            ):
-                return "Prompt-Only"
-            return "Tie"
-
-        if (
-            self.rag_ragtruth_result.hallucination_score
-            < self.prompt_only_ragtruth_result.hallucination_score
-        ):
-            return "RAG"
-        if (
-            self.prompt_only_ragtruth_result.hallucination_score
-            < self.rag_ragtruth_result.hallucination_score
-        ):
-            return "Prompt-Only"
-        return "Tie"
-
-    @property
-    def aimon_winner(self) -> str:
-        """Winner according to AIMon evaluation."""
-        if self.rag_aimon_result is None or self.prompt_only_aimon_result is None:
-            return "N/A"
-
-        rag_halluc = self.rag_aimon_result.has_hallucination
-        prompt_halluc = self.prompt_only_aimon_result.has_hallucination
-        rag_severity = self.rag_aimon_result.hallucination_severity
-        prompt_severity = self.prompt_only_aimon_result.hallucination_severity
-
-        if rag_halluc and not prompt_halluc:
-            return "Prompt-Only"
-        if not rag_halluc and prompt_halluc:
-            return "RAG"
-        if not rag_halluc and not prompt_halluc:
-            if abs(rag_severity - prompt_severity) <= AIMON_WINNER_EPSILON:
-                return "Tie"
-            if rag_severity < prompt_severity:
-                return "RAG"
-            if prompt_severity < rag_severity:
-                return "Prompt-Only"
-            return "Tie"
-
-        if abs(rag_severity - prompt_severity) <= AIMON_WINNER_EPSILON:
-            return "Tie"
-        if rag_severity < prompt_severity:
-            return "RAG"
-        if prompt_severity < rag_severity:
-            return "Prompt-Only"
-        return "Tie"
+    if lower_is_better:
+        return "RAG" if rag_score < baseline_score else "BASELINE"
+    return "RAG" if rag_score > baseline_score else "BASELINE"
