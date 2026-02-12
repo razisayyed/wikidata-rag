@@ -1,0 +1,575 @@
+[
+  {
+    "question": "Who is Albert Einstein?",
+    "description": "Basic biographical question about a well-known scientist",
+    "ground_truth": "Albert Einstein was a German-born theoretical physicist who developed the theories of special relativity and general relativity, provided the quantum explanation of the photoelectric effect, and contributed foundational work to statistical mechanics, Brownian motion, and early quantum theory. He received the 1921 Nobel Prize in Physics for his explanation of the photoelectric effect. He was born on 14 March 1879 in Ulm, Kingdom of W\u00fcrttemberg (German Empire), and died on 18 April 1955 in Princeton, New Jersey, United States. He was a human, male. His parents were Hermann Einstein and Pauline Koch. He was married to Mileva Mari\u0107 (1903\u20131919) and later to Elsa Einstein (1919\u20131936). His children were Hans Albert Einstein, Eduard Einstein, and his daughter Lieserl Einstein, whose early life is documented through correspondence. He held German citizenship at birth, became Swiss in 1901, and American in 1940. He studied at ETH Zurich, earning a teaching diploma in physics and mathematics, and completed his doctorate at the University of Zurich under Alfred Kleiner. He worked at the Swiss Patent Office in Bern and held academic positions at the University of Zurich, Charles University in Prague, ETH Zurich, the Kaiser Wilhelm Institute for Physics in Berlin, and later the Institute for Advanced Study in Princeton. His notable scientific contributions include special relativity, general relativity, mass\u2013energy equivalence (E=mc\u00b2), the Einstein field equations, the explanation of the photoelectric effect, theoretical work on Brownian motion, Einstein coefficients, Bose\u2013Einstein statistics (with S. N. Bose), and the Einstein\u2013Rosen bridge (with Nathan Rosen). His doctoral students included Nathan Rosen and Ernst G. Straus, and he collaborated with scientists such as Marcel Grossmann, S. N. Bose, and Leo Szilard. He received major recognitions including the Copley Medal in 1925 and the Max Planck Medal in 1929. In 1905, his Annus Mirabilis, he published four revolutionary papers that transformed modern physics. He advocated for civil rights in the United States, supported W. E. B. Du Bois, signed the Einstein\u2013Szilard letter in 1939 urging U.S. research into nuclear chain reactions, supported the establishment of the Hebrew University of Jerusalem, and later declined the presidency of Israel in 1952. His brain was removed for scientific study after his death, an action that is historically documented and widely discussed. The chemical element einsteinium (atomic number 99) was named in his honor.",
+    "rag": {
+      "response": "Albert Einstein (1879\u202f\u2013\u202f1955) was a German\u2011born theoretical physicist. He was born on 14\u202fMarch\u202f1879 in Ulm and died on 18\u202fApril\u202f1955. His occupations included physicist, and he held citizenship in Germany, the Kingdom of W\u00fcrttemberg, the Weimar Republic, Switzerland, and the United States. Notable works include quantum mechanics, general relativity, special relativity, mass\u2013energy equivalence, and the theory of relativity.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nCANDIDATES for 'Albert Einstein' (10 found):\n\n1. [Q2464312] Albert Einstein's brain - preserved brain of scientist Albert Einstein (Type: human brain, particular anatomical entity)\n2. [Q937] Albert Einstein - German-born theoretical physicist (1879\u20131955) (Type: human)\n3. [Q17712] Albert Einstein Medal - science award (Type: medallion, science award)\n4. [Q577432] Albert Einstein Award - American science award for achievements in the  natural sciences (1951\u20131979) (Type: science award)\n5. [Q577449] Albert Einstein ATV - European uncrewed cargo resupply spacecraft (Type: Automated Transfer Vehicle)\n6. [Q782022] Kalinga Prize - UNESCO science award (Type: science award)\n7. [Q1287930] Albert Einstein World Award of Science - Recognition and encouragement for scientific and technological research and development. (Type: science award)\n8. [Q1609378] Albert Einstein Science Park - research institute in Germany (Type: research institute, science park)\n9. [Q1630439] Albert Einstein Israelite Hospital - hospital in S\u00e3o Paulo, Brazil (Type: hospital)\n10. [Q1670676] Albert Einstein Peace Prize - peace prize awarded annually since 1980 by the Albert Einstein Peace Prize Foundation (Type: peace award)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: fetch_entity_properties]\nEntity: Albert Einstein\nQID: Q937\nDescription: German-born theoretical physicist (1879\u20131955)\n\nP569: date of birth \u2014 1879-03-14T00:00:00Z\nP570: date of death \u2014 1955-04-18T00:00:00Z\nP106: occupation \u2014 physicist\nP21: sex or gender \u2014 male\nP19: place of birth \u2014 Ulm\nP27: country of citizenship:\n  - United States\n  - Switzerland\n  - Germany\n  - Weimar Republic\n  - Kingdom of W\u00fcrttemberg\nP800: notable work:\n  - quantum mechanics\n  - general relativity\n  - special relativity\n  - mass\u2013energy equivalence\n  - theory of relativity",
+      "score": 0.9374075531959534,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "Albert Einstein (1879\u202f\u2013\u202f1955) was a German\u2011born theoretical physicist who is best known for developing the theory of relativity, including the famous equation\u202fE\u202f=\u202fmc\u00b2. His work transformed the understanding of space, time, and gravity, and he made foundational contributions to quantum theory, statistical mechanics, and cosmology. In 1921 he received the Nobel Prize in Physics for his explanation of the photoelectric effect. Einstein emigrated to the United States in 1933, where he taught at the Institute for Advanced Study in Princeton, New\u202fJersey, and became an outspoken advocate for civil rights, nuclear disarmament, and international cooperation.",
+      "score": 0.27959302067756653,
+      "is_hallucination": true
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "All statements in the answer are directly supported by the ground truth and fetched entity data; no unsupported or contradictory information is present.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": true,
+        "hallucination_score": 0.1537290715372907,
+        "span_count": 3,
+        "hallucinated_spans": [
+          {
+            "text": "and cosmology",
+            "reason": "The source does not mention Einstein making foundational contributions to cosmology; this claim cannot be verified from the provided context."
+          },
+          {
+            "text": "emigrated to the United States in 1933",
+            "reason": "The source states Einstein worked in the United States and became a citizen in 1940, but does not provide the 1933 emigration date."
+          },
+          {
+            "text": "nuclear disarmament, and international cooperation",
+            "reason": "The source notes his civil\u2011rights advocacy and the Einstein\u2013Szilard letter, but does not mention advocacy for nuclear disarmament or international cooperation."
+          }
+        ],
+        "analysis": "The response is mostly accurate but includes three statements not supported by the source: a claim about contributions to cosmology, a specific emigration year, and advocacy for nuclear disarmament and international cooperation. These are hallucinations under the strict grounding criteria.",
+        "case_label": "hallucinated",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.4365234375,
+        "hallucination_score": 0.4365234375,
+        "sentence_count": 2,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": true,
+        "hallucination_severity": 0.91796875,
+        "hallucination_score": 0.91796875,
+        "sentence_count": 4,
+        "hallucinated_sentences": [
+          {
+            "text": "Einstein emigrated to the United States in 1933, where he taught at the Institute for Advanced Study in Princeton, New\u202fJersey, and became an outspoken advocate for civil rights, nuclear disarmament, and international cooperation.",
+            "probability": 0.98828125,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "hallucinated",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "When was Marie Curie born and what were her major achievements?",
+    "description": "Specific biographical facts with dates",
+    "ground_truth": "Marie Curie was born on 7 November 1867 in Warsaw, then part of the Russian Empire (Congress Poland). She was a pioneering physicist and chemist best known for discovering the elements polonium and radium, developing the theory of radioactivity, establishing experimental techniques for isolating radioactive isotopes, and laying the foundations of nuclear physics, radiochemistry, and medical radiation therapy. She was a human, female. She died on 4 July 1934 in Passy, France, from aplastic anemia caused by prolonged exposure to radiation. Her parents were W\u0142adys\u0142aw Sk\u0142odowski and Bronis\u0142awa Sk\u0142odowska. She married Pierre Curie in 1895 and remained married until his death in 1906. She had two daughters, Ir\u00e8ne Joliot-Curie and \u00c8ve Curie. She studied at the clandestine Flying University in Warsaw and later at the University of Paris (Sorbonne), earning degrees in physics and mathematics. She held academic positions at the University of Paris and later directed research at the Radium Institute in Paris, becoming the first woman professor at the Sorbonne. Her scientific fields included radioactivity, experimental physics, and radiation chemistry. She received the 1903 Nobel Prize in Physics (shared with Pierre Curie and Henri Becquerel) for research on radiation phenomena, and the 1911 Nobel Prize in Chemistry for the discovery of radium and polonium and the isolation of radium. She was the first woman to win a Nobel Prize, the first person to win two Nobel Prizes, and the only person to win Nobel Prizes in two different scientific fields (Physics and Chemistry). She directed the development and deployment of mobile X-ray units during World War I, personally training operators and assisting with battlefield radiology. She also played a central role in establishing two major research centers\u2014the Radium Institute in Paris and a parallel institute in Warsaw\u2014both of which became leading hubs for nuclear science and medical radiology.",
+    "rag": {
+      "response": "Marie Curie was born on 7\u202fNovember\u202f1867. Her major achievements include receiving the Nobel Prize in Physics, the Nobel Prize in Chemistry, the Order of the White Eagle, the Davy Medal, the Willard Gibbs Award, and authoring the notable work *Treatise on Radioactivity*.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nCANDIDATES for 'Marie Curie' (10 found):\n\n1. [Q7186] Marie Curie - Polish-French physicist and chemist (1867\u20131934) (Type: human)\n2. [Q11563704] Toshiko Yuasa - Japanese physicist (1909-1980) (Type: human)\n3. [Q656313] Marie Curie High School - public high school in District 3, Ho Chi Minh City, Vietnam (Type: high school)\n4. [Q1548496] Marie-Curie-Gymnasium Dresden - gymnasium (Type: gymnasium)\n5. [Q1613719] Maria Curie-Sk\u0142odowska University - Polish university (Type: public university)\n6. [Q1897114] Marie-Curie-Gymnasium - school in Germany (Type: gymnasium)\n7. [Q1897118] Marie-Curie-Gymnasium D\u00fcsseldorf - high school in D\u00fcsseldorf, Germany (Type: gymnasium)\n8. [Q6762810] Marie Sk\u0142odowska-Curie Actions - research funder (Type: incentive program of the EU, research program)\n9. [Q15995281] Marie Curie Fellows Association - Scientific organization (Type: international organization)\n10. [Q16997351] Marie Curie - charity in the UK (Type: charitable organization)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: fetch_entity_properties]\nEntity: Marie Curie\nQID: Q7186\nDescription: Polish-French physicist and chemist (1867\u20131934)\n\nP569: date of birth \u2014 1867-11-07T00:00:00Z\nP166: award received:\n  - Nobel Prize in Physics\n  - Nobel Prize in Chemistry\n  - Order of the White Eagle\n  - Davy Medal\n  - Willard Gibbs Award\nP800: notable work \u2014 Treatise on Radioactivity\nP61: discoverer or inventor: (not available)",
+      "score": 0.7518318295478821,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "- **Date of birth:** 7\u202fNovember\u202f1867 (Warsaw, then part of the Russian Empire, now Poland).  \n\n- **Major, verified achievements:**  \n  1. **Nobel Prize in Physics (1903)** \u2013 Shared with Pierre Curie and Henri\u202fBecquerel for their combined research on the phenomenon of radioactivity.  \n  2. **Nobel Prize in Chemistry (1911)** \u2013 Awarded for the discovery of the elements **polonium** (named for Poland) and **radium**, and for the isolation of radium in a pure metallic form.  \n  3. **Pioneering work on radioactivity** \u2013 Developed techniques for measuring radioactive emissions, coined the term \u201cradioactivity,\u201d and demonstrated that radioactivity is a property of atoms.  \n  4. **First woman to win a Nobel Prize** and the **first person to win two Nobel Prizes in different scientific fields**.  \n  5. **First female professor at the University of Paris (Sorbonne)**, where she established the first laboratory dedicated to the study of radioactivity.  \n  6. **Medical applications** \u2013 Contributed to the early use of radium in cancer treatment and helped develop mobile X\u2011ray units used during World War\u202fI.  \n\nThese points reflect the historically documented contributions of Marie Curie.",
+      "score": 0.10519000142812729,
+      "is_hallucination": true
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "All claims in the response are verified by the ground truth and fetched entity data; no hallucinations detected.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": true,
+        "hallucination_score": 0.19563392107472713,
+        "span_count": 3,
+        "hallucinated_spans": [
+          {
+            "text": "coined the term \u201cradioactivity,\u201d and demonstrated that radioactivity is a property of atoms.",
+            "reason": "The source does not mention that Marie Curie coined the term 'radioactivity' or that she demonstrated radioactivity as a property of atoms; these claims cannot be verified from the provided context."
+          },
+          {
+            "text": "where she established the first laboratory dedicated to the study of radioactivity.",
+            "reason": "The source states she was the first woman professor at the Sorbonne but does not say she established the first laboratory dedicated to radioactivity; this detail is not supported by the source."
+          },
+          {
+            "text": "Contributed to the early use of radium in cancer treatment",
+            "reason": "The source mentions her work on mobile X\u2011ray units during WWI but does not mention any contribution to early radium cancer treatment; this claim is not verifiable from the provided context."
+          }
+        ],
+        "analysis": "The answer is largely accurate regarding birth date and major Nobel\u2011related achievements, but it adds three unsupported details about coining the term 'radioactivity', founding a dedicated laboratory, and early radium cancer therapy, which constitute hallucinations.",
+        "case_label": "hallucinated",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "Prompt-Only",
+      "rag_evaluation": {
+        "has_hallucination": true,
+        "hallucination_severity": 0.54296875,
+        "hallucination_score": 0.54296875,
+        "sentence_count": 1,
+        "hallucinated_sentences": [],
+        "case_label": "hallucinated",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.3592529296875,
+        "hallucination_score": 0.3592529296875,
+        "sentence_count": 8,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "What is the capital of France?",
+    "description": "Simple geographic fact",
+    "ground_truth": "Paris is the capital and largest city of France.",
+    "rag": {
+      "response": "Paris.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nCANDIDATES for 'France' (10 found):\n\n1. [Q142] France - country in Western Europe and other continents (through its overseas territories in America, Africa and Oceania) (Type: country, republic, sovereign state)\n2. [Q47774] France men's national association football team - national association football team representing France (Type: men's national association football team)\n3. [Q207162] Bourbon Restoration in France - period of French history, 1814\u20131830 (Type: historical country, regime)\n4. [Q1031] France Pre\u0161eren - Slovene national poet, a Carniolan Romantic poet of Slovene descent (1800\u20131849) (Type: human)\n5. [Q1401] Petrarch - Italian scholar and poet (1304-1374) (Type: human)\n6. [Q11637] Judy Garland - American actress, singer, dancer and vaudevillian (1922\u20131969) (Type: human)\n7. [Q19675] Louvre Museum - art and archeology museum in Paris, France (Type: art museum, archaeological museum)\n8. [Q19905] France Inter - French public radio channel (Type: radio station)\n9. [Q19908] France Culture - French public radio channel (Type: radio station)\n10. [Q20110] Francesco Totti - Italian association football player (Type: human)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: fetch_entity_properties]\nEntity: France\nQID: Q142\nDescription: country in Western Europe and other continents (through its overseas territories in America, Africa and Oceania)\n\nP36: capital \u2014 Paris",
+      "score": 0.8287246823310852,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "Paris.",
+      "score": 0.7625110149383545,
+      "is_hallucination": false
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "Tie",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The answer 'Paris' is directly verified by the source context, which states that Paris is the capital of France. No hallucinated or unsupported claims are present.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response correctly states that Paris is the capital of France, which is fully supported by the source context. No unsupported or invented claims are present.",
+        "case_label": "factual",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "Prompt-Only",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.06494140625,
+        "hallucination_score": 0.06494140625,
+        "sentence_count": 0,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.00860595703125,
+        "hallucination_score": 0.00860595703125,
+        "sentence_count": 0,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "What is the relationship between Alan Turing and Dr. Helena Vargass?",
+    "description": "Mix of real and fictional entity - tests hallucination resistance",
+    "ground_truth": "There is no relationship between Alan Turing and Dr. Helena Vargass because Alan Turing is a real historical figure while Dr. Helena Vargass is not a real person. No historical, academic, scientific, or biographical records contain this name, so no connection of any kind exists. Alan Turing was a human mathematician, logician, cryptanalyst, computer scientist, and theoretical biologist. He was born on 23 June 1912 in Maida Vale, London, England, and died on 7 June 1954 in Wilmslow, Cheshire, England. He was male and held British citizenship. His parents were Julius Mathison Turing and Ethel Sara Turing. He never married and had no children. He studied at Sherborne School, then at King's College, Cambridge, where he completed major mathematical work, and later earned his PhD at Princeton University under Alonzo Church. He worked at King's College Cambridge, the Government Code and Cypher School at Bletchley Park during World War II, the National Physical Laboratory, and the University of Manchester. His fields of work included mathematical logic, computability theory, cryptanalysis, early computer architecture, and developmental biology. His notable achievements included the formulation of the universal Turing machine, foundational contributions to computation theory, major contributions to breaking the German Enigma cipher during World War II, and the proposal of the Turing Test for machine intelligence. He was elected a Fellow of the Royal Society in 1951. In 1952, Turing was prosecuted for homosexual acts and forced to undergo chemical castration; he died by suicide in 1954, and was posthumously pardoned by the British government in 2013. Dr. Helena Vargass is fictional, and therefore no factual properties can be provided for this entity.",
+    "rag": {
+      "response": "Helena Vargass cannot be verified, therefore a relationship between Alan Turing and Dr. Helena Vargass cannot be confirmed.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nCANDIDATES for 'Alan Turing' (10 found):\n\n1. [Q7251] Alan Turing - English computer scientist (1912\u20131954) (Type: human)\n2. [Q28846012] Alan Turing - fictional analogon of Alan Turing (1912-1954) (Type: fictional human, film character)\n3. [Q3736114] Alan Turing Memorial - memorial in Manchester, England (Type: sculpture, LGBT monument or memorial)\n4. [Q4707938] Alan Turing Centenary Conference - Computer Science Conference celebrating Alan Turing in his centenary year (Type: recurring event)\n5. [Q4707939] Alan Turing Building - University building at the University of Manchester (Type: building)\n6. [Q4707947] Alan Turing Year - international observance (Type: world day)\n7. [Q16826821] Alan Turing Institute - research institute in Britain (Type: research institute)\n8. [Q17601707] Alan Turing given posthumous pardon - Wikinews article (Type: Wikinews article)\n9. [Q17654894] Alan Turing Building opens at University of Manchester - Wikinews article (Type: Wikinews article)\n10. [Q18574712] Alan Turing: The Enigma - Type: version, edition or translation\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: search_entity_candidates]\nNO CANDIDATES FOUND for 'Helena Vargass'. Entity cannot be verified in Wikidata.",
+      "score": 0.9853572249412537,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "I cannot verify that Dr. Helena Vargass exists, and I have no verified information about any relationship between her and Alan Turing.",
+      "score": 0.957881510257721,
+      "is_hallucination": false
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "Tie",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The answer correctly acknowledges that Helena Vargass cannot be verified and therefore no relationship with Alan Turing can be confirmed, which is fully consistent with the provided source context.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The answer correctly acknowledges the lack of verification for Dr. Helena Vargass and the absence of any relationship with Alan Turing, matching the source information. No unsupported or invented claims are present.",
+        "case_label": "factual",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.06494140625,
+        "hallucination_score": 0.06494140625,
+        "sentence_count": 0,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.2255859375,
+        "hallucination_score": 0.2255859375,
+        "sentence_count": 1,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "Tell me about the collaboration between Dr. Liora Anstrum and Prof. Armin Delacroix.",
+    "description": "Entirely fictional entities - should refuse to provide details",
+    "ground_truth": "There is no collaboration between Dr. Liora Anstrum and Prof. Armin Delacroix because both names refer to fictional individuals. No historical, academic, scientific, or publicly documented persons exist with these names, and therefore no factual properties, biographical details, or real-world collaborations can be provided.",
+    "rag": {
+      "response": "Both Dr.\u202fLiora\u202fAnstrum and Prof.\u202fArmin\u202fDelacroix cannot be verified.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nNO CANDIDATES FOUND for 'Liora Anstrum'. Entity cannot be verified in Wikidata.\n\n[Tool: search_entity_candidates]\nNO CANDIDATES FOUND for 'Armin Delacroix'. Entity cannot be verified in Wikidata.",
+      "score": 0.9622405171394348,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "I cannot verify that Dr.\u202fLiora Anstrum or Prof.\u202fArmin Delacroix exist, nor any collaboration between them.",
+      "score": 0.9547006487846375,
+      "is_hallucination": false
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "Tie",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response correctly reflects the source information by stating that both individuals cannot be verified, with no unsupported or invented claims.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The answer correctly refrains from asserting any facts about the fictional individuals or a collaboration, matching the source that indicates no such real-world information exists.",
+        "case_label": "factual",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "Prompt-Only",
+      "rag_evaluation": {
+        "has_hallucination": true,
+        "hallucination_severity": 0.7109375,
+        "hallucination_score": 0.7109375,
+        "sentence_count": 1,
+        "hallucinated_sentences": [
+          {
+            "text": "Both Dr.\u202fLiora\u202fAnstrum and Prof.\u202fArmin\u202fDelacroix cannot be verified.",
+            "probability": 0.7421875,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "hallucinated",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": true,
+        "hallucination_severity": 0.65625,
+        "hallucination_score": 0.65625,
+        "sentence_count": 1,
+        "hallucinated_sentences": [
+          {
+            "text": "I cannot verify that Dr.\u202fLiora Anstrum or Prof.\u202fArmin Delacroix exist, nor any collaboration between them.",
+            "probability": 0.83203125,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "hallucinated",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "Describe the joint research between Einstein, Bohr, and Dr. Selwyn Hartmere on quantum mechanics.",
+    "description": "Real scientists mixed with fictional - partial hallucination trap",
+    "ground_truth": "There was no joint research between Albert Einstein, Niels Bohr, and Dr. Selwyn Hartmere because Dr. Selwyn Hartmere is not a real person and therefore no collaboration involving this fictional name ever existed. Albert Einstein and Niels Bohr were real physicists, but they did not conduct joint research together; instead, they engaged in famous scientific and philosophical debates about quantum mechanics, especially at the Solvay Conferences in the 1920s and 1930s. Their interactions were intellectual arguments over foundational issues such as determinism and the Copenhagen interpretation, not co-authored work or shared experiments. Albert Einstein was a human theoretical physicist born on 14 March 1879 in Ulm, Kingdom of W\u00fcrttemberg, German Empire, and he died on 18 April 1955 in Princeton, New Jersey, United States. He held German, Swiss, and American citizenships, was male, and his occupations included theoretical physicist and professor. His parents were Hermann Einstein and Pauline Koch. He married Mileva Mari\u0107 and later Elsa Einstein and had two sons, Hans Albert Einstein and Eduard Einstein. He studied at ETH Zurich and held academic positions at the University of Zurich, Charles University in Prague, ETH Zurich, the Kaiser Wilhelm Institute for Physics, and the Institute for Advanced Study in Princeton. His scientific fields included relativity, quantum theory, statistical physics, and cosmology, and his major achievements included special relativity, general relativity, the photoelectric effect, and foundational contributions to early quantum physics. He received the 1921 Nobel Prize in Physics, the Copley Medal, and the Max Planck Medal. Niels Bohr was a human theoretical physicist born on 7 October 1885 in Copenhagen, Denmark, where he also died on 18 November 1962. He held Danish citizenship, was male, and his parents were Christian Bohr and Ellen Adler Bohr. He married Margrethe N\u00f8rlund and had children including Aage Bohr, who became a Nobel laureate. Niels Bohr studied at the University of Copenhagen and worked with J. J. Thomson and Ernest Rutherford in Cambridge and Manchester. He founded the Institute for Theoretical Physics (now the Niels Bohr Institute) at the University of Copenhagen. His scientific fields included atomic structure, quantum theory, and nuclear physics. His major achievements included the Bohr model of the atom, foundational contributions to quantum mechanics, and the principle of complementarity. He received the 1922 Nobel Prize in Physics and numerous international honors, and he later contributed as a scientific advisor to the Allied nuclear effort during World War II. Because Dr. Selwyn Hartmere does not exist, no factual properties or collaborations can be attributed to this name.",
+    "rag": {
+      "response": "Dr. Selwyn Hartmere cannot be verified in Wikidata. No collaborative research involving Albert Einstein (Q937) and Niels\u202fBohr (Q7085) together with a third verified researcher is recorded; the only documented interaction between Einstein and Bohr is the Bohr\u2013Einstein debates, not joint research.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nCANDIDATES for 'Albert Einstein' (10 found):\n\n1. [Q2464312] Albert Einstein's brain - preserved brain of scientist Albert Einstein (Type: human brain, particular anatomical entity)\n2. [Q937] Albert Einstein - German-born theoretical physicist (1879\u20131955) (Type: human)\n3. [Q17712] Albert Einstein Medal - science award (Type: medallion, science award)\n4. [Q577432] Albert Einstein Award - American science award for achievements in the  natural sciences (1951\u20131979) (Type: science award)\n5. [Q577449] Albert Einstein ATV - European uncrewed cargo resupply spacecraft (Type: Automated Transfer Vehicle)\n6. [Q782022] Kalinga Prize - UNESCO science award (Type: science award)\n7. [Q1287930] Albert Einstein World Award of Science - Recognition and encouragement for scientific and technological research and development. (Type: science award)\n8. [Q1609378] Albert Einstein Science Park - research institute in Germany (Type: research institute, science park)\n9. [Q1630439] Albert Einstein Israelite Hospital - hospital in S\u00e3o Paulo, Brazil (Type: hospital)\n10. [Q1670676] Albert Einstein Peace Prize - peace prize awarded annually since 1980 by the Albert Einstein Peace Prize Foundation (Type: peace award)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: search_entity_candidates]\nCANDIDATES for 'Niels Bohr' (10 found):\n\n1. [Q7085] Niels Bohr - Danish physicist (1885\u20131962) (Type: human)\n2. [Q263761] University of Copenhagen Niels Bohr Institute - scientific research institute located in Copenhagen, Denmark (Type: educational institution, research center)\n3. [Q7031462] Niels Bohr International Gold Medal - international engineering award (since 1955) (Type: science award)\n4. [Q12302729] Niels Bohr - 1951 film by Asbj\u00f8rn Andersen, Jens Henriksen (Type: film)\n5. [Q19354348] Niels Bohrhage - street in Emmeloord, the Netherlands (Type: street)\n6. [Q19354349] Niels Bohrpad - street in Amersfoort, the Netherlands (Type: street)\n7. [Q19354350] Niels Bohrplaats - street in Rotterdam, the Netherlands (Type: street)\n8. [Q19354351] Niels Bohrstraat - street in Ede, the Netherlands (Type: street)\n9. [Q19354352] Niels Bohrstraat - street in Maastricht, the Netherlands (Type: street)\n10. [Q19354353] Niels Bohrweg - street in Leiden, the Netherlands (Type: street)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: search_entity_candidates]\nNO CANDIDATES FOUND for 'Selwyn Hartmere'. Entity cannot be verified in Wikidata.\n\n[Tool: wikidata_sparql]\nQuery returned no results.\n\n[Tool: search_entity_candidates]\nCANDIDATES for 'Einstein Bohr' (1 found):\n\n1. [Q1065345] Bohr\u2013Einstein debates - Series of public disputes between physicists Niels Bohr and Albert Einstein (Type: debate)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: wikidata_sparql]\nQuery returned no results.",
+      "score": 0.6280902624130249,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "Einstein and Bohr are historically documented as having engaged in extensive debates over the foundations of quantum mechanics, most famously at the Solvay Conferences in the 1920s and 1930s. These discussions centered on issues such as the completeness of quantum theory, the principle of complementarity, and the Einstein\u2011Podolsky\u2011Rosen paradox.\n\nI cannot verify that a researcher named Dr. Selwyn Hartmere existed or that he participated in any joint research project with Einstein and Bohr. Consequently, there is no verified record of a collaborative study involving all three individuals.",
+      "score": 0.6140767931938171,
+      "is_hallucination": false
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "All statements in the response are fully supported by the source context; no unsupported or invented claims are present.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": true,
+        "hallucination_score": 0.058922558922558925,
+        "span_count": 1,
+        "hallucinated_spans": [
+          {
+            "text": "the Einstein\u2011Podolsky\u2011Rosen paradox",
+            "reason": "The source context does not mention the Einstein\u2011Podolsky\u2011Rosen paradox; therefore this claim cannot be verified from the provided information."
+          }
+        ],
+        "analysis": "All statements about Einstein and Bohr\u2019s debates and the non\u2011existence of Dr. Selwyn Hartmere are supported by the source. The only unsupported claim is the reference to the Einstein\u2011Podolsky\u2011Rosen paradox, which is not present in the source and thus constitutes a hallucination.",
+        "case_label": "hallucinated",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.384765625,
+        "hallucination_score": 0.384765625,
+        "sentence_count": 2,
+        "hallucinated_sentences": [
+          {
+            "text": "Dr. Selwyn Hartmere cannot be verified in Wikidata.",
+            "probability": 0.71484375,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": true,
+        "hallucination_severity": 0.9453125,
+        "hallucination_score": 0.9453125,
+        "sentence_count": 4,
+        "hallucinated_sentences": [
+          {
+            "text": "I cannot verify that a researcher named Dr. Selwyn Hartmere existed or that he participated in any joint research project with Einstein and Bohr.",
+            "probability": 0.78125,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "hallucinated",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "Compare the contributions of Ada Lovelace and Charles Babbage to computing.",
+    "description": "Comparison of two related historical figures",
+    "ground_truth": "Ada Lovelace and Charles Babbage made foundational but distinct contributions to the early history of computing. Charles Babbage, a human mathematician, inventor, and mechanical engineer, conceived the Difference Engine and designed the Analytical Engine, introducing key architectural principles of modern computers including a memory store, a processing unit (the mill), conditional branching, loops, and programmable operations. (His pioneering work has earned him recognition as the 'father of the computer'.) Ada Lovelace, a human mathematician and writer, studied the Analytical Engine, translated and expanded Luigi Menabrea\u2019s paper on it, and added extensive annotations that included the algorithm for computing Bernoulli numbers\u2014widely regarded as the first published computer program, making Lovelace widely regarded as the world\u2019s first computer programmer. Lovelace also articulated the theoretical insight that the machine could manipulate symbols beyond numerical calculation, envisioning general-purpose computing and early notions of software. Ada Lovelace was born on 10 December 1815 in London, England, died on 27 November 1852 in Marylebone, London, held British citizenship, was female, and her parents were Lord George Gordon Byron and Anne Isabella Milbanke Byron. She married William King-Noel, later Earl of Lovelace, and had three children: Byron, Anne Isabella, and Ralph. She studied mathematics privately under mentors such as Augustus De Morgan and Mary Somerville and worked primarily as an independent thinker. Her fields included mathematics and early computational theory. Charles Babbage was born on 26 December 1791 in London, England, died on 18 October 1871 in London, held British citizenship, was male, and his parents were Benjamin Babbage and Betsy Plumleigh Teape. He married Georgiana Whitmore and had several children. He studied at Trinity College and Peterhouse, Cambridge, later became Lucasian Professor of Mathematics, and worked on mechanical computation, mathematical tables, and precision engineering. He is often regarded as the 'father of the computer' for his pioneering inventions. His designs for the Analytical Engine influenced later generations of computer scientists and historians. Babbage provided the conceptual hardware architecture of computing, while Lovelace contributed the earliest software concepts and theoretical understanding of symbolic computation, and they collaborated intellectually on the Analytical Engine project.",
+    "rag": {
+      "response": "Ada Lovelace\u202f(1815\u20111852) expanded Charles\u202fBabbage\u2019s ideas into the first vision of a general\u2011purpose computer.\u202fShe translated Luigi\u202fMenabrea\u2019s description of Babbage\u2019s Analytical Engine and added extensive notes that included a method for calculating Bernoulli numbers\u2014often called the first published computer program.\u202fLovelace also argued that the Engine could manipulate symbols other than numbers (e.g., music), thereby anticipating the broader capabilities of modern computers.\n\nCharles\u202fBabbage\u202f(1791\u20111871) originated the concept of a digital, programmable computer.\u202fHe designed the Difference Engine, the first mechanical computer for calculating tables, and the more ambitious Analytical Engine, which incorporated a programmable architecture and, via a principle borrowed from the Jacquard loom, could be instructed to perform arbitrary calculations.\u202fHe also devised early computer printers and is frequently called the \u201cfather of the computer.\u201d\n\n**Comparison**  \n- **Invention vs. Programming:** Babbage created the hardware concepts (Difference Engine, Analytical Engine); Lovelace provided the first software\u2011level work (algorithmic notes, program for Bernoulli numbers).  \n- **Scope of Vision:** Babbage\u2019s designs focused on mechanised calculation; Lovelace broadened the vision to include non\u2011numeric data and general\u2011purpose computation.  \n- **Legacy:** Babbage is credited with inventing the first mechanical computers; Lovelace is credited as the first computer programmer and for articulating the potential of computers beyond pure arithmetic.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nCANDIDATES for 'Ada Lovelace' (10 found):\n\n1. [Q7259] Ada Lovelace - English mathematician (1815\u20131852) (Type: human)\n2. [Q3611580] Ada Lovelace\u2019 algorithm for computing Bernoulli numbers - algorithm (Type: algorithm)\n3. [Q30128828] Ada Lovelace Award - award for women in computing (Type: award)\n4. [Q55393255] Q55393255 - (no description)\n5. [Q66232516] Ada Lovelace Church of England High School - school in Ealing, UK (Type: secondary school, free school)\n6. [Q86050625] Rue Ada-Lovelace - street of Paris, France (Type: street)\n7. [Q87282992] Ada Lovelace - episode of In Our Time (Type: radio series episode)\n8. [Q102144753] Q102144753 - (no description)\n9. [Q102144756] Q102144756 - (no description)\n10. [Q114068528] Ada Lovelace - GPU microarchitecture designed by Nvidia (Type: microarchitecture)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: search_entity_candidates]\nCANDIDATES for 'Charles Babbage' (10 found):\n\n1. [Q33215138] Charles Babbage's brain - the preserved brain of scientist Charles Babbage (Type: human brain, particular anatomical entity)\n2. [Q46633] Charles Babbage - English mathematician, philosopher, and engineer (1791\u20131871) (Type: human)\n3. [Q3276938] Charles Babbage Institute - research center at the University of Minnesota (Type: research center, academic publisher)\n4. [Q28049734] Charles Babbage - painting by Samuel Laurence (Type: painting)\n5. [Q30048539] Q30048539 - (no description)\n6. [Q42714013] Q42714013 - (no description)\n7. [Q52156071] Charles Babbage, FRS (1792-1871) - painting (Type: painting)\n8. [Q52391803] Q52391803 - (no description)\n9. [Q52391804] Q52391804 - (no description)\n10. [Q52473495] Q52473495 - (no description)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: fetch_entity_properties]\nEntity: Ada Lovelace\nQID: Q7259\nDescription: English mathematician (1815\u20131852)\n\nP106: occupation:\n  - writer\n  - poet\n  - engineer\n  - computer scientist\n  - mathematician\nP800: notable work: (not available)\nP31: instance of (what type of thing it is) \u2014 human\nP21: sex or gender \u2014 female\nP19: place of birth \u2014 London\nP22: father \u2014 Lord Byron\nP25: mother \u2014 Anne Isabella Byron\nP27: country of citizenship \u2014 United Kingdom of Great Britain and Ireland\nP166: award received: (not available)\n\n[Tool: fetch_entity_properties]\nEntity: Charles Babbage\nQID: Q46633\nDescription: English mathematician, philosopher, and engineer (1791\u20131871)\n\nP106: occupation:\n  - astronomer\n  - writer\n  - engineer\n  - computer scientist\n  - mathematician\nP800: notable work:\n  - analytical engine\n  - difference engine\n  - Ninth Bridgewater Treatise\n  - Reflections on the Decline of Science in England, and on Some of Its Causes\n  - On the Economy of Machinery and Manufactures\nP31: instance of (what type of thing it is) \u2014 human\n\n[Tool: fetch_wikipedia_article]\n=== Wikipedia Article: Ada Lovelace (Q7259) ===\n\nAda Lovelace\nEnglish mathematician (1815\u20131852)\nAugusta Ada King, Countess of Lovelace\n(\nn\u00e9e\nByron\n; 10 December 1815 \u2013 27 November 1852), also known as\nAda Lovelace\n, was an English\nmathematician\nand\nwriter\nchiefly known for her work on\nCharles Babbage\n's proposed mechanical general-purpose\ncomputer\n, the\nAnalytical Engine\n. She was the first to recognise that the machine had applications beyond pure calculation. Ada Lovelace is often considered to be the first computer programmer.\nAda Lovelace was the only legitimate child of poet\nLord Byron\nand reformer\nAnne Isabella Milbanke\n.\nAll her half-siblings,\nLord Byron's other children\n, were born out of\nwedlock\nto other women.\nLord Byron separated from his wife a month after Ada was born and left\nEngland\nforever. He died in\nGreece\nwhilst fighting in the Greek War of Independence, when she was eight. Lady Byron was anxious about her daughter's upbringing and promoted Lovelace's interest in mathematics and logic in an effort to prevent her from developing her father's perceived\ninsanity\n. Despite this, Lovelace remained interested in her father, naming one son\nByron\nand the other, for her father's middle name,\nGordon\n. Upon her death, she was buried next to her father at her request. Although often ill in her childhood, Lovelace pursued her studies assiduously.\nShe married\nWilliam King\nin 1835. King was already a Baron, and was created Viscount Ockham and 1st\nEarl of Lovelace\nin 1838. The name Lovelace was chosen because Ada was descended from the extinct\nBaron Lovelaces\n.\nThe title given to her husband thus made Ada the Countess of Lovelace.\nLovelace's educational and social exploits brought her into contact with scientists such as\nAndrew Crosse\n, Charles Babbage,\nSir David Brewster\n,\nCharles Wheatstone\nand\nMichael Faraday\n, and the author\nCharles Dickens\n, contacts which she used to further her education. Lovelace described her approach as \"poetical science\"\nand herself as an \"Analyst (& Metaphysician)\".\nWhen she was eighteen, Lovelace's mathematical talents led her to a long working relationship and friendship with fellow British mathematician Charles Babbage. She was in particular interested in Babbage's work on the\nAnalytical Engine\n. Lovelace first met him on 5 June 1833, when she and\nher mother\nattended one of\nCharles Babbage's Saturday night soir\u00e9es\nwith their mutual friend, and Lovelace's private tutor,\nMary Somerville\n.\nThough Babbage's Analytical Engine was never constructed and exercised no influence on the later invention of electronic computers, it has been recognised in retrospect as a\nTuring-complete\ngeneral-purpose computer which anticipated the essential features of a modern electronic computer; Babbage is therefore known as the \"father of computers,\" and Lovelace is credited with several computing \"firsts\" for her collaboration with him.\nBetween 1842 and 1843, Lovelace translated\nan article\nby the military engineer\nLuigi Menabrea\n(later\nPrime Minister of Italy\n) about the Analytical Engine, supplementing it with\nseven long explanatory notes\n.\nThese notes described a method of using the machine to calculate\nBernoulli numbers\nwhich is often called the first published\ncomputer program\n.\nShe also developed a vision of the capability of computers to go beyond mere calculating or number-crunching, while many others, including Babbage himself, focused only on those capabilities.\nLovelace was the first to point out the possibility of encoding information besides mere arithmetical figures, such as music, and manipulating it with such a machine. Her mindset of \"poetical science\" led her to ask questions about the Analytical Engine (as shown in her notes), examining how individuals and society relate to technology as a collaborative tool.\nAda is widely commemorated (see\nCommemoration\nbelow), including in the names of a programming language, several roads, buildings and institutes as well as programmes, lectures and courses.\nThere are also a number of plaques, statues, paintings, literary and non-fiction works.\nBiography\nChildhood\nLord Byron\nexpected his child to be a \"glorious boy\" and was disappointed when\nLady Byron\ngave birth to a girl.\nThe child was named after Byron's half-sister,\nAugusta Leigh\n, and was called \"Ada\" by Byron himself.\nOn 16 January 1816, at Lord Byron's command, Lady Byron left for her parents' home at\nKirkby Mallory\n, taking their five-week-old daughter with her.\nAlthough English law at the time granted full custody of children to the father in cases of separation, Lord Byron made no attempt to claim his parental rights,\nbut did request that his sister keep him informed of Ada's welfare.\nAda Byron, aged four\nOn 21 April, Lord Byron signed the\ndeed of separation\n, although very reluctantly, and left England for good a few days later.\nAside from an acrimonious separation, Lady Byron continued throughout her life to make allegations about her husband's immoral behaviour.\nThis set of events made Lovelace infamous in Victorian society. Ada did not have a relationship with her father. He died in April 1824 when she was eight years old. Her mother was the only significant parental figure in her life.\nLovelace was not shown the family portrait of her father until her 20th birthday.\nAda Byron, aged seven, by\nAlfred d'Orsay\n, 1822,\nSomerville College, Oxford\nLovelace did not have a close relationship with her mother. She was often left in the care of her maternal grandmother Judith, Hon. Lady Milbanke, who doted on her. However, because of societal attitudes of the time\u2014which favoured the husband in any separation, with the welfare of any child acting as mitigation\u2014Lady Byron had to present herself as a loving mother to the rest of society. This included writing anxious letters to Lady Milbanke about her daughter's welfare, with a cover note saying to retain the letters in case she had to use them to show maternal concern.\nIn one letter to Lady Milbanke, she referred to her daughter as \"it\": \"I talk to it for your satisfaction, not my own, and shall be very glad when you have it under your own.\"\nLady Byron had her teenage daughter watched by close friends for any sign of moral deviation. Lovelace dubbed these observers the \"Furies\" and later complained they exaggerated and invented stories about her.\nAda Byron, aged seventeen, 1832\nLovelace was often ill, beginning in early childhood. At the age of eight, she experienced headaches that obscured her vision.\nIn June 1829, she was paralyzed after a bout of\nmeasles\n. She was subjected to continuous bed rest for nearly a year, something which may have extended her period of disability. By 1831, she was able to walk with crutches. Despite the illnesses, she developed her mathematical and technological skills.\nWhen Ada was twelve years old, this future \"Lady Fairy\", as Charles Babbage affectionately called her, decided she wanted to fly. Ada Byron went about the project methodically, thoughtfully, with imagination and passion. Her first step, in February 1828, was to construct wings. She investigated different material and sizes. She considered various materials for the wings: paper, oilsilk, wires, and feathers. She examined the\nanatomy of birds\nto determine the right proportion between the wings and the body. She decided to write a book,\nFlyology,\nillustrating, with plates, some of her findings. She decided what equipment she would need; for example, a compass, to \"cut across the country by the most direct road\", so that she could surmount mountains, rivers, and valleys. Her final step was to integrate steam with the \"art of flying\".\nAda Byron had an affair with a tutor in early 1833. She tried to elope with him after she was caught, but the tutor's relatives recognised her and contacted her mother. Lady Byron and her friends covered the incident up to prevent a public scandal.\nLovelace never met her younger half-sister,\nAllegra\n, the daughter of Lord Byron and\nClaire Clairmont\n. Allegra died in 1822 at the age of five. Lovelace did have s\n\n[Article truncated...]\n\n=== END OF ARTICLE ===\n\nINSTRUCTIONS: Extract facts relevant to the question from this article.\nOnly use information explicitly stated in the article above.\n\n[Tool: fetch_wikipedia_article]\n=== Wikipedia Article: Charles Babbage (Q46633) ===\n\nCharles Babbage\nEnglish mathematician, philosopher, and engineer (1791\u20131871)\nCharles Babbage\nKH\nFRS\n(\n/\n\u02c8\nb\n\u00e6\nb\n\u026a\nd\u0292\n/\n; 26 December 1791\n\u2013 18 October 1871) was an English\npolymath\n.\nA mathematician, philosopher, inventor and mechanical engineer, Babbage originated the concept of a digital programmable computer.\nBabbage is considered by some to merit the title of \"\nfather of the computer\n\".\nHe is credited with inventing the first\nmechanical computer\n, the\ndifference engine\n, that eventually led to more complex electronic designs, though all the essential ideas of modern computers are to be found in his\nanalytical engine\n, programmed using a principle openly borrowed from the\nJacquard loom\n.\nAs part of his computer work, he also designed the first\ncomputer printers\n.\nHe had a broad range of interests in addition to his work on computers, covered in his 1832 book\nEconomy of Manufactures and Machinery\n.\nHe was an important figure in the social scene in London, and is credited with importing the \"scientific soir\u00e9e\" from France with his well-attended\nSaturday evening soir\u00e9es\n.\nHis varied work in other fields has led him to be described as \"pre-eminent\" among the many polymaths of his century.\nBabbage, who died before the complete successful engineering of many of his designs, including his Difference Engine and Analytical Engine, remained a prominent figure in the ideating of computing. Parts of his incomplete mechanisms are on display in the\nScience Museum\nin London. In 1991, a functioning difference engine was constructed from the original plans. Built to\ntolerances\nachievable in the 19th century, the success of the finished engine indicated that Babbage's machine would have worked.\nEarly life\nPortrait of Charles Babbage (\nc.\n1820\n)\nBabbage's birthplace is disputed, but according to the\nOxford Dictionary of National Biography\nhe was most likely born at 44 Crosby Row,\nWalworth Road\n, London, England.\nA\nblue plaque\non the junction of Larcom Street and Walworth Road commemorates the event.\nHis date of birth was given in his obituary in\nThe Times\nas 26 December 1792; but then a nephew wrote to say that Babbage was born one year earlier, in 1791. The parish register of\nSt. Mary's\n,\nNewington\n, London, shows that Babbage was\nbaptised\non 6 January 1792, supporting a birth year of 1791.\nBabbage\nc.\n1850\nBabbage was one of four children of Benjamin Babbage and Betsy Plumleigh Teape. His father was a banking partner of\nWilliam Praed\nin founding Praed's & Co. of\nFleet Street\n, London, in 1801.\nIn 1808, the Babbage family moved into the old Rowdens house in\nEast Teignmouth\n. Around the age of eight, Babbage was sent to a country school in\nAlphington\nnear Exeter to recover from a life-threatening fever. For a short time, he attended\nKing Edward VI Grammar School\nin\nTotnes\n, South Devon, but his health forced him back to private tutors for a time.\nBabbage then joined the 30-student Holmwood Academy, in Baker Street,\nEnfield\n,\nMiddlesex\n, under the Reverend Stephen Freeman.\nThe academy had a library that prompted Babbage's love of mathematics. He studied with two more private tutors after leaving the academy. The first was a clergyman near\nCambridge\n; through him Babbage encountered\nCharles Simeon\nand his evangelical followers, but the tuition was not what he needed.\nHe was brought home, to study at the Totnes school: this was at age 16 or 17.\nThe second was an\nOxford\ntutor, under whom Babbage reached a level in Classics sufficient to be accepted by the\nUniversity of Cambridge\n.\nAt the University of Cambridge\nBabbage arrived at\nTrinity College, Cambridge\n, in October 1810.\nHe was already self-taught in some parts of contemporary mathematics;\nhe had read\nRobert Woodhouse\n,\nJoseph Louis Lagrange\n, and\nMaria Gaetana Agnesi\n. As a result, he was disappointed in the standard mathematical instruction available at the university.\nBabbage,\nJohn Herschel\n,\nGeorge Peacock\n, and several other friends formed the\nAnalytical Society\nin 1812; they were also close to\nEdward Ryan\n.\nAs a student, Babbage was also a member of other societies such as\nThe Ghost Club\n, concerned with investigating supernatural phenomena, and the Extractors Club, dedicated to liberating its members from the madhouse, should any be committed to one.\nIn 1812, Babbage transferred to\nPeterhouse, Cambridge\n.\nHe was the top mathematician there, but did not graduate with honours. He instead received a degree without examination in 1814. He had defended a thesis that was considered blasphemous in the preliminary public disputation, but it is not known whether this fact is related to his not sitting the examination.\nAfter Cambridge\nConsidering his reputation, Babbage quickly made progress. He lectured to the\nRoyal Institution\non astronomy in 1815, and was elected a\nFellow of the Royal Society\nin 1816.\nAfter graduation, on the other hand, he applied for positions unsuccessfully, and had little in the way of a career. In 1816 he was a candidate for a teaching job at\nHaileybury College\n; he had recommendations from\nJames Ivory\nand\nJohn Playfair\n, but lost out to\nHenry Walter\n.\nIn 1819, Babbage and Herschel visited Paris and the\nSociety of Arcueil\n, meeting leading French mathematicians and physicists.\nThat year Babbage applied to be professor at the\nUniversity of Edinburgh\n, with the recommendation of\nPierre Simon Laplace\n; the post went to\nWilliam Wallace\n.\nWith Herschel, Babbage worked on the\nelectrodynamics\nof\nArago's rotations\n, publishing in 1825. Their explanations were only transitional, being picked up and broadened by\nMichael Faraday\n. The\nphenomena\nare now part of the theory of\neddy currents\n, and Babbage and Herschel missed some of the clues to unification of\nelectromagnetic theory\n, staying close to\nAmp\u00e8re's force law\n.\nBabbage purchased the actuarial tables of\nGeorge Barrett\n, who died in 1821 leaving unpublished work, and surveyed the field in 1826 in\nComparative View of the Various Institutions for the Assurance of Lives\n.\nThis interest followed a project to set up an insurance company, prompted by\nFrancis Baily\nand mooted in 1824, but not carried out.\nBabbage did calculate actuarial tables for that scheme, using\nEquitable Society\nmortality data from 1762 onwards.\nDuring this whole period, Babbage depended awkwardly on his father's support, given his father's attitude to his early marriage, of 1814: he and Edward Ryan wedded the Whitmore sisters. He made a home in\nMarylebone\nin London and established a large family.\nOn his father's death in 1827, Babbage inherited a large estate (value around \u00a3100,000, equivalent to \u00a3\n10.9\nmillion\nor $\n15\nmillion\ntoday), making him independently wealthy.\nAfter his wife's death in the same year he spent time travelling. In Italy he met\nLeopold II, Grand Duke of Tuscany\n, foreshadowing a later visit to\nPiedmont\n.\nIn April 1828 he was in Rome, and relying on Herschel to manage the difference engine project, when he heard that he had become a professor at Cambridge, a position he had three times failed to obtain (in 1820, 1823 and 1826).\nRoyal Astronomical Society\nBabbage was instrumental in founding the\nRoyal Astronomical Society\nin 1820, initially known as the Astronomical Society of London.\nIts original aims were to reduce astronomical calculations to a more standard form, and to circulate data.\nThese directions were closely connected with Babbage's ideas on computation, and in 1824 he won its\nGold Medal\n, cited \"for his invention of an engine for calculating\nmathematical\nand\nastronomical tables\n\".\nBabbage's motivation to overcome errors in tables by mechanisation had been a commonplace since\nDionysius Lardner\nwrote about it in 1834 in the\nEdinburgh Review\n(under Babbage's guidance).\nThe context of these developments is still debated. Babbage's own account of the origin of the difference engine begins with the Astronomical Society's wish to improve\nThe Nautical Almanac\n. Babbage and Herschel were asked to oversee a trial project, to recalculate some part of those tables.\n\n[Article truncated...]\n\n=== END OF ARTICLE ===\n\nINSTRUCTIONS: Extract facts relevant to the question from this article.\nOnly use information explicitly stated in the article above.",
+      "score": 0.6172160506248474,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "**Charles Babbage (1791\u20111871)**  \n- Designed the **Difference Engine** (1822), a mechanical calculator intended to compute polynomial tables automatically.  \n- Conceived the **Analytical Engine** (1837), a general\u2011purpose mechanical computer with a central \u201cstore\u201d (memory), a \u201cmill\u201d (CPU), a punched\u2011card input system, and the ability to perform conditional branching and loops.  \n- Provided the architectural blueprint for modern computers, introducing concepts such as a programmable instruction set and separation of data storage from processing.\n\n**Ada Lovelace (1815\u20111852)**  \n- Authored the extensive **Notes on the Analytical Engine** (published 1843), which included the first published algorithm intended to be executed by a machine\u2014calculating Bernoulli numbers.  \n- Recognized that the Engine could manipulate symbols beyond numbers, foreseeing applications in music, art, and scientific modeling.  \n- Introduced the idea of **software** as distinct from hardware, describing how the Engine could be programmed to perform a variety of tasks.\n\n**Comparison**  \n- **Primary role:** Babbage was the hardware architect; Lovelace was the first theorist of software and broader computational potential.  \n- **Innovation focus:** Babbage created the mechanical structures and logical design of a programmable computer; Lovelace articulated how to program such a machine and envisioned its non\u2011numeric uses.  \n- **Legacy:** Babbage\u2019s designs form the conceptual foundation of computer architecture; Lovelace\u2019s notes are regarded as the earliest expression of computer programming and the notion of computers as general\u2011purpose information processors.",
+      "score": 0.49205252528190613,
+      "is_hallucination": true
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "All statements in the answer are directly supported by the ground\u2011truth and Wikipedia excerpts; no unsupported or contradictory claims were found.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": true,
+        "hallucination_score": 0.3899637243047158,
+        "span_count": 4,
+        "hallucinated_spans": [
+          {
+            "text": "Designed the Difference Engine (1822), a mechanical calculator intended to compute polynomial tables automatically.",
+            "reason": "The source mentions Babbage conceived the Difference Engine but does not provide the year 1822; the date is therefore unsupported."
+          },
+          {
+            "text": "Conceived the Analytical Engine (1837), a general\u2011purpose mechanical computer with a central \u201cstore\u201d (memory), a \u201cmill\u201d (CPU), a punched\u2011card input system, and the ability to perform conditional branching and loops.",
+            "reason": "The source describes the Analytical Engine but does not give the year 1837; the date is not verifiable from the source."
+          },
+          {
+            "text": "Authored the extensive Notes on the Analytical Engine (published 1843), which included the first published algorithm intended to be executed by a machine\u2014calculating Bernoulli numbers.",
+            "reason": "The source notes Lovelace\u2019s notes and algorithm but does not state the publication year 1843; the date is unsupported."
+          },
+          {
+            "text": "Recognized that the Engine could manipulate symbols beyond numbers, foreseeing applications in music, art, and scientific modeling.",
+            "reason": "The source says Lovelace saw symbolic manipulation beyond numbers but does not mention specific foresight about music, art, or scientific modeling; this claim is not grounded in the source."
+          }
+        ],
+        "analysis": "The response correctly captures the main contributions of Babbage and Lovelace but adds unsupported dates and specific application examples that are not present in the provided source, resulting in hallucinations.",
+        "case_label": "hallucinated",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.376953125,
+        "hallucination_score": 0.376953125,
+        "sentence_count": 5,
+        "hallucinated_sentences": [
+          {
+            "text": "He also devised early computer printers and is frequently called the \u201cfather of the computer.\u201d\n\n**Comparison**  \n- **Invention vs.",
+            "probability": 0.9453125,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": true,
+        "hallucination_severity": 0.7265625,
+        "hallucination_score": 0.7265625,
+        "sentence_count": 9,
+        "hallucinated_sentences": [
+          {
+            "text": "**Comparison**  \n- **Primary role:** Babbage was the hardware architect; Lovelace was the first theorist of software and broader computational potential.",
+            "probability": 0.8203125,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "hallucinated",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "What organization did Alan Turing work for during World War II?",
+    "description": "Specific historical fact requiring precise answer",
+    "ground_truth": "During World War II, Alan Turing worked for the Government Code and Cypher School (GC&CS) at Bletchley Park, the British government's cryptanalytic center responsible for signals intelligence and codebreaking. The organization was founded in 1919, operated at Bletchley Park during the war, and later became the foundation of GCHQ. Alan Turing was a human mathematician, logician, cryptanalyst, computer scientist, and theoretical biologist born on 23 June 1912 in Maida Vale, London, and he died on 7 June 1954 in Wilmslow, Cheshire. He held British citizenship, was male, and his parents were Julius Mathison Turing and Ethel Sara Turing. He never married and had no children. Turing studied at Sherborne School, King's College Cambridge, and earned his PhD at Princeton University under Alonzo Church. He worked at King's College Cambridge, the Government Code and Cypher School at Bletchley Park, the National Physical Laboratory, and the University of Manchester. His fields included mathematical logic, computability theory, cryptanalysis, early computer architecture, and developmental biology. His major achievements included formulating the universal Turing machine, foundational contributions to computation theory, breaking key components of the Enigma cipher during World War II, and proposing the Turing Test for machine intelligence. He was elected a Fellow of the Royal Society in recognition of his scientific contributions. In 1952, Turing was convicted under British law for homosexual acts and subjected to chemical castration; two years later, in 1954, he died by suicide. In 2013, he received a posthumous royal pardon.",
+    "rag": {
+      "response": "Alan Turing worked for the Government Communications Headquarters (GCHQ) during World War\u202fII.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nCANDIDATES for 'Alan Turing' (10 found):\n\n1. [Q7251] Alan Turing - English computer scientist (1912\u20131954) (Type: human)\n2. [Q28846012] Alan Turing - fictional analogon of Alan Turing (1912-1954) (Type: fictional human, film character)\n3. [Q3736114] Alan Turing Memorial - memorial in Manchester, England (Type: sculpture, LGBT monument or memorial)\n4. [Q4707938] Alan Turing Centenary Conference - Computer Science Conference celebrating Alan Turing in his centenary year (Type: recurring event)\n5. [Q4707939] Alan Turing Building - University building at the University of Manchester (Type: building)\n6. [Q4707947] Alan Turing Year - international observance (Type: world day)\n7. [Q16826821] Alan Turing Institute - research institute in Britain (Type: research institute)\n8. [Q17601707] Alan Turing given posthumous pardon - Wikinews article (Type: Wikinews article)\n9. [Q17654894] Alan Turing Building opens at University of Manchester - Wikinews article (Type: Wikinews article)\n10. [Q18574712] Alan Turing: The Enigma - Type: version, edition or translation\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: fetch_entity_properties]\nEntity: Alan Turing\nQID: Q7251\nDescription: English computer scientist (1912\u20131954)\n\nP108: employer:\n  - University of Cambridge\n  - Government Communications Headquarters\n  - Victoria University of Manchester\n  - National Physical Laboratory\nP39: position held: (not available)",
+      "score": 0.9636728167533875,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "Alan\u202fTuring worked for the British Government Code and Cypher School (GC&CS) at Bletchley\u202fPark during World War\u202fII.",
+      "score": 0.9809955954551697,
+      "is_hallucination": false
+    },
+    "vectara_winner": "Prompt-Only",
+    "ragtruth": {
+      "winner": "Prompt-Only",
+      "rag_evaluation": {
+        "has_hallucination": true,
+        "hallucination_score": 0.4838709677419355,
+        "span_count": 1,
+        "hallucinated_spans": [
+          {
+            "text": "Government Communications Headquarters (GCHQ)",
+            "reason": "Contradicts source context: Turing worked for the Government Code and Cypher School (GC&CS) during WWII, not GCHQ, which only succeeded GC&CS after the war."
+          }
+        ],
+        "analysis": "The response incorrectly identifies Turing's WWII employer as GCHQ, which is not supported by the source and directly conflicts with the stated fact that he worked for GC&CS at Bletchley Park during the war.",
+        "case_label": "hallucinated",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "All claims in the response are directly verified by the source context; no hallucinations detected.",
+        "case_label": "factual",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "Prompt-Only",
+      "rag_evaluation": {
+        "has_hallucination": true,
+        "hallucination_severity": 0.921875,
+        "hallucination_score": 0.921875,
+        "sentence_count": 1,
+        "hallucinated_sentences": [
+          {
+            "text": "Alan Turing worked for the Government Communications Headquarters (GCHQ) during World War\u202fII.",
+            "probability": 1.0,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "hallucinated",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.49609375,
+        "hallucination_score": 0.49609375,
+        "sentence_count": 1,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      }
+    }
+  }
+]

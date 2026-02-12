@@ -1,0 +1,22 @@
+# Core agent/runtime dependencies
+langchain
+langchain-core
+langchain-ollama
+langchain-community
+langgraph
+pydantic
+SPARQLWrapper
+requests
+beautifulsoup4
+
+# Optional tracing (used if configured)
+langsmith
+
+# Benchmark/evaluation dependencies
+transformers
+torch
+sentencepiece
+
+# Optional evaluators/integrations
+langchain-openai
+hdm2

@@ -1,0 +1,25 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "compile-wikidata-agent",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"-m",
+				"compileall",
+				"wikidata_langchain_agent.py"
+			]
+		},
+		{
+			"label": "compile-entity-profile",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"-m",
+				"compileall",
+				"wikidata_langchain_agent.py"
+			]
+		}
+	]
+}
