@@ -82,6 +82,25 @@ def main():
         default=0.0,
         help="Decoding temperature used for both compared models in benchmarks (default: 0.0)",
     )
+    parser.add_argument(
+        "--ground-truth-style",
+        choices=["concise", "rich"],
+        default="concise",
+        help=(
+            "Ground-truth construction style: "
+            "'concise' uses only canonical answers (fair default), "
+            "'rich' adds key-fact bullets."
+        ),
+    )
+    parser.add_argument(
+        "--max-ground-truth-facts",
+        type=int,
+        default=None,
+        help=(
+            "Optional cap on key facts included when --ground-truth-style=rich "
+            "(default: include all available facts)."
+        ),
+    )
     args = parser.parse_args()
 
     # Handle ragtruth flag
@@ -111,6 +130,8 @@ def main():
         test_cases=test_cases,
         threshold=args.threshold,
         eval_context_mode=args.eval_context_mode,
+        ground_truth_style=args.ground_truth_style,
+        max_ground_truth_facts=args.max_ground_truth_facts,
         benchmark_temperature=args.benchmark_temperature,
         verbose=True,
         use_llm_judge=args.llm_judge,

@@ -31,17 +31,42 @@ from .vectra import (
 )
 from .llm_judge import judge_responses
 
+VALID_GROUND_TRUTH_STYLES = {"concise", "rich"}
+
 
 # ==========================================================================
 # Test Functions (with minimal console output)
 # ==========================================================================
 
 
-def build_reference_ground_truth(test_case: TestCase) -> str:
-    """Compose rich reference text from canonical answer + optional key facts."""
-    parts: List[str] = [test_case.ground_truth.strip()]
+def build_reference_ground_truth(
+    test_case: TestCase,
+    ground_truth_style: str = "concise",
+    max_ground_truth_facts: Optional[int] = None,
+) -> str:
+    """
+    Build benchmark reference context from the test case.
+
+    Styles:
+    - concise: canonical answer only (default, fairer for short answers).
+    - rich: canonical answer plus key-fact bullets.
+    """
+    canonical = test_case.ground_truth.strip()
+    style = (ground_truth_style or "concise").strip().lower()
+    if style not in VALID_GROUND_TRUTH_STYLES:
+        style = "concise"
+
+    if style == "concise":
+        return canonical
 
     key_facts = [fact.strip() for fact in test_case.key_facts if fact and fact.strip()]
+    if max_ground_truth_facts is not None and max_ground_truth_facts > 0:
+        key_facts = key_facts[:max_ground_truth_facts]
+
+    if not key_facts:
+        return canonical
+
+    parts: List[str] = [canonical]
     if key_facts:
         parts.append("Key facts:")
         parts.extend(f"- {fact}" for fact in key_facts)
@@ -179,6 +204,8 @@ def test_both_models(
     aimon_evaluator: Optional[AimonEvaluator] = None,
     threshold: float = 0.5,
     eval_context_mode: str = "ground_truth",
+    ground_truth_style: str = "concise",
+    max_ground_truth_facts: Optional[int] = None,
     compute_rag_faithfulness: bool = True,
     use_llm_judge: bool = True,
     use_ragtruth: bool = True,
@@ -192,7 +219,11 @@ def test_both_models(
     Detailed information is saved to report files.
     """
     # Test RAG model
-    reference_ground_truth = build_reference_ground_truth(test_case)
+    reference_ground_truth = build_reference_ground_truth(
+        test_case=test_case,
+        ground_truth_style=ground_truth_style,
+        max_ground_truth_facts=max_ground_truth_facts,
+    )
 
     # Test RAG model
     rag_result = test_rag_model(
@@ -326,6 +357,8 @@ def run_comparison_suite(
     test_cases: Optional[List[TestCase]] = None,
     threshold: float = 0.5,
     eval_context_mode: str = "ground_truth",
+    ground_truth_style: str = "concise",
+    max_ground_truth_facts: Optional[int] = None,
     benchmark_temperature: float = 0.0,
     compute_rag_faithfulness: bool = True,
     use_llm_judge: bool = True,
@@ -382,7 +415,14 @@ def run_comparison_suite(
             use_llm_judge = False
 
     print(f"Running {len(test_cases)} test cases...\n")
+    normalized_gt_style = (ground_truth_style or "concise").strip().lower()
+    if normalized_gt_style not in VALID_GROUND_TRUTH_STYLES:
+        normalized_gt_style = "concise"
+
     print(f"Primary evaluation mode: {eval_context_mode}")
+    print(f"Ground-truth style: {normalized_gt_style}")
+    if normalized_gt_style == "rich" and max_ground_truth_facts:
+        print(f"Ground-truth fact cap: {max_ground_truth_facts}")
     print(f"Benchmark temperature: {benchmark_temperature}\n")
 
     results: List[ComparisonResult] = []
@@ -397,6 +437,8 @@ def run_comparison_suite(
             aimon_evaluator=aimon_evaluator,
             threshold=threshold,
             eval_context_mode=eval_context_mode,
+            ground_truth_style=normalized_gt_style,
+            max_ground_truth_facts=max_ground_truth_facts,
             compute_rag_faithfulness=compute_rag_faithfulness,
             use_llm_judge=use_llm_judge,
             use_ragtruth=use_ragtruth,

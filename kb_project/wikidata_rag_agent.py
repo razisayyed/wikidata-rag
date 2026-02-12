@@ -65,7 +65,7 @@ _PYTHON_TAG_TOOL_CALL_PATTERN = re.compile(
     r"(?is)<\|python_tag\|>\s*\{.*?\"name\"\s*:\s*\"[^\"]+\".*?\"parameters\"\s*:\s*\{"
 )
 _TOOL_PAYLOAD_ONLY_PATTERN = re.compile(
-    r"(?is)^\s*(?:<\|python_tag\|>\s*)?\{\s*['\"]name['\"]\s*:\s*['\"]"
+    r"(?is)^\s*(?:next step\s*:\s*)?(?:<\|python_tag\|>\s*)?\{\s*['\"]name['\"]\s*:\s*['\"]"
     r"(?:fetch_|search_|wikidata_sparql)[^'\"]*['\"]\s*,\s*['\"]parameters['\"]\s*:\s*\{"
     r".*?\}\s*\}\s*$"
 )
@@ -215,7 +215,7 @@ def answer_question(
         print()
         log_result("Finished chain", "✅")
         cleaned_answer = finalize_agent_answer(str(final_answer or fallback_answer), question)
-        if not cleaned_answer:
+        if not cleaned_answer or is_process_message(cleaned_answer):
             cleaned_answer = "I cannot verify that."
         log_answer(cleaned_answer)
         return cleaned_answer
