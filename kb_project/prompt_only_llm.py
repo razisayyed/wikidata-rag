@@ -26,6 +26,7 @@ from .utils.logging import (
 )
 from .utils.messages import content_to_text
 from .prompts import PROMPT_ONLY_SYSTEM_PROMPT
+from .wikidata_rag_agent import finalize_agent_answer
 from .settings import (
     DEFAULT_TEMPERATURE,
     PROMPT_ONLY_MODEL,
@@ -118,6 +119,7 @@ def answer_question_prompt_only(
             )
 
         final_answer = content_to_text(final_answer)
+        final_answer = finalize_agent_answer(final_answer, question)
 
         if verbose:
             log_result("Response generated.", "✅")
@@ -139,6 +141,7 @@ def answer_question_prompt_only(
             resp = llm_raw.invoke(messages)
             answer = content_to_text(resp.content) if hasattr(resp, "content") else str(resp)
             answer = content_to_text(answer)
+            answer = finalize_agent_answer(answer, question)
             if verbose:
                 log_result("Fallback Response:", "⚠️")
                 log_answer(answer)

@@ -14,6 +14,7 @@ from ..utils.logging import (
     log_tool_usage,
 )
 from ..settings import DEFAULT_SPARQL_LIMIT
+from .tool_protocol_state import mark_sparql_attempt
 from ..wikidata.sparql import run_sparql as _run_sparql
 
 logger = configure_logging()
@@ -64,6 +65,8 @@ def wikidata_sparql(sparql: str, max_rows: int = DEFAULT_SPARQL_LIMIT) -> str:
     """
     Run a custom SPARQL query for complex questions.
 
+    Prefer this before Wikipedia fallback for factual retrieval when
+    fetch_entity_properties is insufficient.
     Use for aggregations, filtering, or multi-entity relationships.
     Only SELECT queries are allowed.
     """
@@ -71,6 +74,7 @@ def wikidata_sparql(sparql: str, max_rows: int = DEFAULT_SPARQL_LIMIT) -> str:
     is_valid, validation_error = is_safe_read_only_select(sparql)
     if not is_valid:
         return validation_error
+    mark_sparql_attempt()
 
     effective_max_rows = min(int(max_rows), MAX_SPARQL_ROWS)
 

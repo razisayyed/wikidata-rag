@@ -12,6 +12,7 @@ from ..utils.logging import (
     configure_logging,
     log_tool_usage,
 )
+from .tool_protocol_state import get_authorized_qids, is_qid_authorized
 from ..wikidata.properties import WIKIDATA_PROPERTIES
 from ..wikidata.sparql import run_sparql as _run_sparql
 
@@ -31,7 +32,11 @@ class FetchPropertiesInput(BaseModel):
     """Input for fetching properties by QID."""
 
     qid: str = Field(
-        description="The Wikidata QID of the entity (e.g., 'Q142' for France)"
+        description=(
+            "The Wikidata QID of the entity as a literal string "
+            "(e.g., 'Q142' for France). Do not pass code/expression syntax."
+        ),
+        pattern=r"^Q\d+$",
     )
     properties: List[str] = Field(
         description="List of Wikidata property IDs to fetch (e.g., ['P569', 'P106'])"
@@ -61,9 +66,42 @@ def fetch_entity_properties(
 
     qid = qid.strip().upper()
     qid_pattern = re.compile(r"^Q\d+$")
+    expression_like_qid_pattern = re.compile(
+        r"SEARCH_ENTITY_CANDIDATES|\[|\]|\(|\)|\{|\}|\"QID\"|'QID'",
+        re.IGNORECASE,
+    )
+
+    allowed = get_authorized_qids()
+    if not allowed:
+        return (
+            "Error: Tool-order protocol violation. "
+            "Call search_entity_candidates(entity_name, entity_type) first for each entity, "
+            "select one returned candidate, then pass its literal QID to fetch_entity_properties "
+            "(for example: qid='Q142'). No candidate QIDs are registered for this run."
+        )
 
     if not qid_pattern.match(qid):
+        if expression_like_qid_pattern.search(qid):
+            return (
+                "Error: Invalid QID argument. "
+                "Call search_entity_candidates(entity_name, entity_type) first, "
+                "select a returned candidate, then pass only its literal QID string "
+                "to fetch_entity_properties (for example: 'Q142')."
+            )
         return f"Error: Invalid QID '{qid}'. Must be 'Q' followed by digits (e.g., 'Q142')."
+
+    if not is_qid_authorized(qid):
+        allowed_hint = (
+            f" Authorized candidate QIDs in this run: {', '.join(allowed)}."
+            if allowed
+            else " No candidate QIDs are registered for this run."
+        )
+        return (
+            "Error: Tool-order protocol violation. "
+            "Call search_entity_candidates(entity_name, entity_type) first for each entity, "
+            "select a returned QID, then call fetch_entity_properties."
+            f"{allowed_hint}"
+        )
 
     # Handle nested property lists
     processed_properties = []

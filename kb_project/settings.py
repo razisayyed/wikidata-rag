@@ -24,12 +24,24 @@ def _env(name: str, default: str) -> str:
     return value if value else default
 
 
+def _env_int(name: str, default: int, minimum: int = 1) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return max(default, minimum)
+    try:
+        value = int(raw)
+    except ValueError:
+        return max(default, minimum)
+    return max(value, minimum)
+
+
 WIKIDATA_RAG_MODEL = _env("WIKIDATA_RAG_MODEL", _env("LLM_MODEL", "qwen2.5:32b-instruct"))
 PROMPT_ONLY_MODEL = _env("PROMPT_ONLY_MODEL", WIKIDATA_RAG_MODEL)
 RAGTRUTH_MODEL = _env("RAGTRUTH_MODEL", WIKIDATA_RAG_MODEL)
 OPENAI_JUDGE_MODEL = _env("OPENAI_JUDGE_MODEL", "gpt-4o")
 VECTARA_DEVICE = _env("VECTARA_DEVICE", "auto").lower()
 AIMON_DEVICE = _env("AIMON_DEVICE", "auto").lower()
+RAG_RECURSION_LIMIT = _env_int("RAG_RECURSION_LIMIT", 40, minimum=1)
 
 # Backward-compatible alias used across the codebase.
 LLM_MODEL = WIKIDATA_RAG_MODEL

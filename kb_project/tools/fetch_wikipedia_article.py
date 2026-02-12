@@ -22,6 +22,7 @@ from ..settings import (
     MAX_ARTICLE_CHARS,
     WIKIPEDIA_USER_AGENT,
 )
+from .tool_protocol_state import has_sparql_attempt
 from ..wikidata.sparql import run_sparql as _run_sparql
 
 logger = configure_logging()
@@ -42,10 +43,18 @@ def fetch_wikipedia_article_tool(qid: str, entity_name: str) -> str:
     Returns the full article text (truncated if very long).
     YOU must read through the article and extract relevant facts for the question.
 
-    Use this for detailed information not available in Wikidata properties.
+    Use this only after structured retrieval is insufficient:
+    1) search_entity_candidates -> 2) fetch_entity_properties -> 3) wikidata_sparql (if needed).
     """
 
     entity_name = entity_name.replace("\u00a0", " ").strip()
+
+    if not has_sparql_attempt():
+        return (
+            "Error: Tool-order protocol violation. "
+            "Call wikidata_sparql(sparql, max_rows) before fetch_wikipedia_article "
+            "when structured properties are insufficient."
+        )
 
     wikipedia_title = get_wikipedia_title_from_qid(qid)
     if not wikipedia_title:

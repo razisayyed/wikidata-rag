@@ -71,6 +71,7 @@ All variables can be set in `.env` (auto-loaded by the app).
   - `PROMPT_ONLY_MODEL` (prompt-only baseline)
   - `RAGTRUTH_MODEL` (RAGTruth evaluator on Ollama)
   - `OPENAI_JUDGE_MODEL` (OpenAI judge model)
+  - `RAG_RECURSION_LIMIT` (max LangGraph tool/reasoning steps per RAG run; default `40`)
   - `VECTARA_DEVICE` (device for Vectara evaluator: `auto|cuda|cpu|mps`)
   - `AIMON_DEVICE` (device for AIMon evaluator: `auto|cuda|cpu|mps`)
 

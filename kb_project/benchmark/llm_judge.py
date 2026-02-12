@@ -105,6 +105,8 @@ Verify facts using your knowledge and determine which response is more factually
 - Accuracy of stated facts
 - Appropriate refusal for unknown/fictional entities
 - Avoidance of fabrication
+- Scope discipline: extra details beyond the asked question are NOT a positive signal
+- Risk awareness: unsupported/scope-bloating extra claims should count as negative behavior and potential hallucination
 
 You will evaluate: RAG Response (uses knowledge retrieval) vs Prompt-Only Response (no retrieval)."""
 
@@ -138,6 +140,8 @@ Analyze both responses using YOUR KNOWLEDGE for:
 1. Fictional entity detection (good responses state "cannot verify", not invent details)
 2. Fact verification (dates, places, achievements, relationships)
 3. Fabricated collaborations or connections
+4. Scope discipline: extra information must not improve the score
+5. Penalize unsupported or unnecessary extra claims as risky behavior (potential hallucination)
 
 Respond with JSON in this format:
 ```json

@@ -36,15 +36,17 @@ from .utils.messages import content_to_text
 from .prompts import WIKIDATA_SYSTEM_PROMPT
 from .settings import (
     DEFAULT_TEMPERATURE,
+    RAG_RECURSION_LIMIT,
     WIKIDATA_RAG_MODEL,
     get_ollama_connection_kwargs,
 )
 from .tools import (
     fetch_entity_properties,
-    fetch_wikipedia_article_tool,
     search_entity_candidates,
     wikidata_sparql,
+    fetch_wikipedia_article_tool,
 )
+from .tools.tool_protocol_state import reset_tool_protocol_state
 
 OLLAMA_MODEL = WIKIDATA_RAG_MODEL
 
@@ -59,22 +61,50 @@ _PROCESS_TEXT_PATTERN = re.compile(
     r"(?is)(based on the search results|next step\s*:|i (have )?identified .*?\(q\d+\)|"
     r"\"name\"\s*:\s*\"(?:fetch_|search_|wikidata_sparql)|\"parameters\"\s*:)"
 )
+_PYTHON_TAG_TOOL_CALL_PATTERN = re.compile(
+    r"(?is)<\|python_tag\|>\s*\{.*?\"name\"\s*:\s*\"[^\"]+\".*?\"parameters\"\s*:\s*\{"
+)
+_TOOL_PAYLOAD_ONLY_PATTERN = re.compile(
+    r"(?is)^\s*(?:<\|python_tag\|>\s*)?\{\s*['\"]name['\"]\s*:\s*['\"]"
+    r"(?:fetch_|search_|wikidata_sparql)[^'\"]*['\"]\s*,\s*['\"]parameters['\"]\s*:\s*\{"
+    r".*?\}\s*\}\s*$"
+)
 _QID_PATTERN = re.compile(r"\[?Q\d+\]?")
 _PAREN_NOTE_PATTERN = re.compile(r"\(\s*note:.*?\)", re.IGNORECASE | re.DOTALL)
 _META_LINE_PATTERN = re.compile(
     r"(?i)\b(based on the (search|retrieved)|according to (wikidata|wikipedia)|"
     r"i (will|can) (verify|check)|direct retrieval|common understanding)\b"
 )
+_SOURCE_PROCESS_CLAUSE_PATTERN = re.compile(
+    r"(?i)\b(?:based on|according to)\s+(?:the\s+)?"
+    r"(?:search results?|retrieved evidence|available evidence|available information|wikidata|wikipedia)\b[:,]?"
+)
+_SOURCE_REFERENCE_PATTERN = re.compile(r"(?i)\b(?:in|from)\s+(?:wikidata|wikipedia)\b")
+_TOOL_PROCESS_NOUN_PATTERN = re.compile(
+    r"(?i)\b(?:search results?|retrieved evidence|tool output|tool outputs)\b"
+)
+_SOURCE_ID_CLAUSE_PATTERN = re.compile(
+    r"(?i),?\s*(?:whose\s+)?(?:wikidata\s+id|wikipedia\s+id|qid)\s+(?:is|was)\s*\[?Q\d+\]?,?"
+)
+_SOURCE_WORD_PATTERN = re.compile(r"(?i)\b(?:wikidata|wikipedia)\b")
 
 
 def is_process_message(text: str) -> bool:
     """Return True when content looks like intermediate planning/tool orchestration."""
-    return bool(_PROCESS_TEXT_PATTERN.search((text or "").strip()))
+    normalized = (text or "").strip()
+    return bool(
+        _PROCESS_TEXT_PATTERN.search(normalized)
+        or _PYTHON_TAG_TOOL_CALL_PATTERN.search(normalized)
+    )
 
 
 def finalize_agent_answer(answer: str, question: str) -> str:
     """Remove output artifacts that should not appear in final user-facing answers."""
     final_text = (answer or "").strip()
+    if _TOOL_PAYLOAD_ONLY_PATTERN.match(final_text):
+        return ""
+
+    final_text = re.sub(r"(?is)<\|python_tag\|>\s*", "", final_text)
     final_text = _PAREN_NOTE_PATTERN.sub("", final_text)
     final_text = re.sub(r"\s+", " ", final_text).strip()
 
@@ -87,12 +117,25 @@ def finalize_agent_answer(answer: str, question: str) -> str:
     final_text = re.sub(
         r"(?i)\s+based on (available evidence|available information).*$", "", final_text
     ).strip()
+    final_text = _SOURCE_PROCESS_CLAUSE_PATTERN.sub("", final_text)
+    final_text = _SOURCE_REFERENCE_PATTERN.sub("", final_text)
+    final_text = _TOOL_PROCESS_NOUN_PATTERN.sub("", final_text)
+    final_text = _SOURCE_ID_CLAUSE_PATTERN.sub("", final_text)
+    final_text = _SOURCE_WORD_PATTERN.sub("", final_text)
+    final_text = re.sub(r"\s+,", ",", final_text)
+    final_text = re.sub(r",\s*\.", ".", final_text)
+    final_text = re.sub(r",\s*([!?])", r"\1", final_text)
+    final_text = re.sub(r"\s+\.", ".", final_text)
+    final_text = re.sub(r"\(\s*\)", "", final_text)
+    final_text = re.sub(r"\s{2,}", " ", final_text).strip()
 
     question_lower = (question or "").lower()
     qid_requested = "qid" in question_lower or "wikidata id" in question_lower
     if not qid_requested:
         final_text = _QID_PATTERN.sub("", final_text)
         final_text = re.sub(r"\s{2,}", " ", final_text).strip()
+    if _TOOL_PAYLOAD_ONLY_PATTERN.match(final_text):
+        return ""
     return final_text
 
 
@@ -119,8 +162,8 @@ def build_agent(
     tools = [
         search_entity_candidates,
         fetch_entity_properties,
-        fetch_wikipedia_article_tool,
         wikidata_sparql,
+        fetch_wikipedia_article_tool,
     ]
 
     llm_with_tools = llm.bind_tools(tools)
@@ -137,6 +180,7 @@ def answer_question(
     question: str, agent: Optional[Runnable] = None, verbose: bool = True
 ) -> str:
     """Send a question through the Wikidata agent and return its answer."""
+    reset_tool_protocol_state()
     graph = agent or build_agent()
 
     if verbose:
@@ -145,7 +189,11 @@ def answer_question(
         log_result("Starting Single-LLM ReAct agent", "🚀")
         print()
         final_answer = ""
-        for event in graph.stream({"messages": [("user", question)]}):
+        fallback_answer = ""
+        for event in graph.stream(
+            {"messages": [("user", question)]},
+            config={"recursion_limit": RAG_RECURSION_LIMIT},
+        ):
             for node_name, node_output in event.items():
                 messages = node_output.get("messages", [])
                 for msg in messages:
@@ -160,15 +208,22 @@ def answer_question(
                         has_tool_calls = getattr(msg, "tool_calls", None)
                         if not has_tool_calls or len(has_tool_calls) == 0:
                             parsed = content_to_text(msg.content)
+                            if parsed and not fallback_answer:
+                                fallback_answer = parsed
                             if parsed and not is_process_message(parsed):
                                 final_answer = parsed
         print()
         log_result("Finished chain", "✅")
-        cleaned_answer = finalize_agent_answer(str(final_answer), question)
+        cleaned_answer = finalize_agent_answer(str(final_answer or fallback_answer), question)
+        if not cleaned_answer:
+            cleaned_answer = "I cannot verify that."
         log_answer(cleaned_answer)
         return cleaned_answer
     else:
-        result = graph.invoke({"messages": [("user", question)]})
+        result = graph.invoke(
+            {"messages": [("user", question)]},
+            config={"recursion_limit": RAG_RECURSION_LIMIT},
+        )
         messages = result.get("messages", [])
         fallback_answer = ""
         for msg in reversed(messages):
@@ -176,11 +231,14 @@ def answer_question(
                 content = content_to_text(msg.content)
                 if not fallback_answer:
                     fallback_answer = content
-                if not is_process_message(content):
-                    return finalize_agent_answer(content, question)
+                cleaned = finalize_agent_answer(content, question)
+                if cleaned and not is_process_message(cleaned):
+                    return cleaned
         if fallback_answer:
-            return finalize_agent_answer(fallback_answer, question)
-        return str(result)
+            cleaned_fallback = finalize_agent_answer(fallback_answer, question)
+            if cleaned_fallback and not is_process_message(cleaned_fallback):
+                return cleaned_fallback
+        return "I cannot verify that."
 
 
 # ==========================================================================

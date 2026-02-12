@@ -13,6 +13,7 @@ from ..utils.logging import (
     log_tool_usage,
 )
 from ..settings import MAX_SEARCH_RESULTS
+from .tool_protocol_state import register_search_candidates
 from ..wikidata.sparql import run_sparql as _run_sparql
 
 logger = configure_logging()
@@ -51,6 +52,8 @@ def search_entity_candidates(entity_name: str, entity_type: str = "") -> str:
     if not candidates:
         return f"NO CANDIDATES FOUND for '{entity_name}'. Entity cannot be verified in Wikidata."
 
+    register_search_candidates(entity_name=entity_name, candidates=candidates)
+
     # Format candidates for LLM analysis
     lines = [f"CANDIDATES for '{entity_name}' ({len(candidates)} found):"]
     lines.append("")
@@ -70,6 +73,12 @@ def search_entity_candidates(entity_name: str, entity_type: str = "") -> str:
             info = "(no description)"
 
         lines.append(f"{i}. [{c['qid']}] {c['label']} - {info}")
+
+    lines.append("")
+    lines.append(
+        "NEXT STEP: Call fetch_entity_properties with one literal QID from above "
+        "(example: qid='Q142'). Do not use code/expression syntax."
+    )
 
     log_tool_usage(
         "search_entity_candidates",
