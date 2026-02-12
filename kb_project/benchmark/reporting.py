@@ -27,64 +27,94 @@ def _escape_markdown_cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", "<br>")
 
 
+def _resolve_factual_winner(result: object) -> str:
+    """
+    Resolve factual winner robustly for both dataclass results and light test doubles.
+
+    Preference:
+    1) explicit factual_winner attribute/property if available
+    2) derive from consensus factual labels
+    3) fallback to legacy winner
+    """
+    explicit = getattr(result, "factual_winner", None)
+    if isinstance(explicit, str) and explicit:
+        return explicit
+
+    rag_factual = getattr(result, "rag_factual_consensus", None)
+    prompt_factual = getattr(result, "prompt_factual_consensus", None)
+    if rag_factual is True and prompt_factual is False:
+        return "RAG"
+    if rag_factual is False and prompt_factual is True:
+        return "Prompt-Only"
+    if rag_factual is not None and prompt_factual is not None:
+        return "Tie"
+
+    legacy = getattr(result, "winner", None)
+    if isinstance(legacy, str) and legacy:
+        return legacy
+    return "N/A"
+
+
 def generate_comparison_table(
-    results: List[ComparisonResult], use_emoji: bool = True
+    results: List[ComparisonResult],
+    use_emoji: bool = True,
+    legacy_single_winner: bool = False,
 ) -> str:
     """Generate a block-style summary for console output."""
-    # Use ASCII for console, emoji for markdown
     if use_emoji:
         ok, fail = "✅", "❌"
     else:
         ok, fail = f"{Colors.GREEN}OK{Colors.RESET}", f"{Colors.RED}FAIL{Colors.RESET}"
 
+    def _fact_label(value: bool | None) -> str:
+        if value is None:
+            return "N/A"
+        return "FACTUAL" if value else "FACTUAL-ERROR"
+
     lines = []
     lines.append(f"{Colors.BOLD}{'=' * 80}{Colors.RESET}")
-    lines.append(f"{Colors.BOLD}BENCHMARK RESULTS SUMMARY{Colors.RESET}")
+    lines.append(f"{Colors.BOLD}BENCHMARK RESULTS SUMMARY (DUAL-TRACK){Colors.RESET}")
     lines.append(f"{Colors.BOLD}{'=' * 80}{Colors.RESET}")
     if results:
-        lines.append(f"Primary evaluation mode: {results[0].evaluation_mode}")
+        lines.append(f"Analysis version: {getattr(results[0], 'analysis_version', 'v2_dual_track')}")
+        lines.append(f"Primary factual mode: {getattr(results[0], 'factual_mode', 'ground_truth')}")
+        lines.append(f"Diagnostic mode: {getattr(results[0], 'diagnostic_mode', 'combined')}")
 
     for i, r in enumerate(results, 1):
         lines.append("")
         lines.append(f"{Colors.BOLD}Test {i}: {r.description}{Colors.RESET}")
         lines.append("-" * 40)
-
-        # Vectara
-        rag_v = fail if r.rag_is_hallucination else ok
-        prompt_v = fail if r.prompt_only_is_hallucination else ok
         lines.append(
-            f"  Vectara:  RAG={r.rag_score:.3f}{rag_v}  Prompt={r.prompt_only_score:.3f}{prompt_v}  → {r.winner}"
+            f"  Factual:  RAG={_fact_label(getattr(r, 'rag_factual_consensus', None))}  "
+            f"Prompt={_fact_label(getattr(r, 'prompt_factual_consensus', None))}  "
+            f"→ {_resolve_factual_winner(r)}"
         )
-        if r.rag_faithfulness_score is not None:
-            rag_f = fail if r.rag_faithfulness_is_hallucination else ok
+        lines.append(
+            f"  Complete: RAG={getattr(r, 'rag_completeness', 'insufficient')}  "
+            f"Prompt={getattr(r, 'prompt_completeness', 'insufficient')}"
+        )
+        lines.append(
+            f"  Grounding: RAG={getattr(r, 'rag_grounding_status', 'unavailable')}"
+            + (
+                f" ({r.rag_grounding_score:.3f})"
+                if getattr(r, "rag_grounding_score", None) is not None
+                else ""
+            )
+        )
+        if (
+            getattr(r, "rag_factual_disagreement_rate", None) is not None
+            and getattr(r, "prompt_factual_disagreement_rate", None) is not None
+        ):
             lines.append(
-                f"  Faithful: RAG={r.rag_faithfulness_score:.3f}{rag_f}  (retrieved-evidence grounding)"
+                f"  Disagree: RAG={r.rag_factual_disagreement_rate:.2f}  "
+                f"Prompt={r.prompt_factual_disagreement_rate:.2f}"
             )
 
-        # RAGTruth
-        if r.rag_ragtruth_result is not None:
-            rag_rt = r.rag_ragtruth_result
-            prompt_rt = r.prompt_only_ragtruth_result
-            rag_rt_mark = fail if rag_rt.has_hallucination else ok
-            prompt_rt_mark = fail if (prompt_rt and prompt_rt.has_hallucination) else ok
-            prompt_score = prompt_rt.hallucination_score if prompt_rt else 0
-            prompt_spans = prompt_rt.span_count if prompt_rt else 0
+        if legacy_single_winner:
+            rag_v = fail if r.rag_is_hallucination else ok
+            prompt_v = fail if r.prompt_only_is_hallucination else ok
             lines.append(
-                f"  RAGTruth: RAG={rag_rt.hallucination_score:.3f}({rag_rt.span_count}sp){rag_rt_mark}  "
-                f"Prompt={prompt_score:.3f}({prompt_spans}sp){prompt_rt_mark}  → {r.ragtruth_winner}"
-            )
-
-        # AIMon
-        if r.rag_aimon_result is not None:
-            rag_am = r.rag_aimon_result
-            prompt_am = r.prompt_only_aimon_result
-            rag_am_mark = fail if rag_am.has_hallucination else ok
-            prompt_am_mark = fail if (prompt_am and prompt_am.has_hallucination) else ok
-            prompt_sev = prompt_am.hallucination_severity if prompt_am else 0
-            prompt_sent = len(prompt_am.hallucinated_sentences) if prompt_am else 0
-            lines.append(
-                f"  AIMon:    RAG={rag_am.hallucination_severity:.3f}({len(rag_am.hallucinated_sentences)}sent){rag_am_mark}  "
-                f"Prompt={prompt_sev:.3f}({prompt_sent}sent){prompt_am_mark}  → {r.aimon_winner}"
+                f"  Legacy Vectara: RAG={r.rag_score:.3f}{rag_v}  Prompt={r.prompt_only_score:.3f}{prompt_v}  → {r.winner}"
             )
 
     lines.append("")
@@ -92,22 +122,91 @@ def generate_comparison_table(
     return "\n".join(lines)
 
 
-def generate_markdown_table(results: List[ComparisonResult]) -> str:
-    """Generate markdown tables for the report file - one per evaluator."""
+def generate_markdown_table(
+    results: List[ComparisonResult],
+    legacy_single_winner: bool = False,
+) -> str:
+    """Generate markdown tables for the report file."""
     output = ""
 
     # ==========================================================================
-    # Vectara Table
+    # Dual-Track Primary Tables
     # ==========================================================================
-    output += "### Vectara Hallucination Model Results\n\n"
-    output += "| # | Question | RAG Score | RAG | Prompt Score | Prompt | Winner |\n"
-    output += "|---|----------|-----------|-----|--------------|--------|--------|\n"
-
+    output += "### Factual Track (Primary)\n\n"
+    output += "| # | Question | RAG Factual | Prompt Factual | Winner |\n"
+    output += "|---|----------|-------------|----------------|--------|\n"
     for i, r in enumerate(results, 1):
         q_short = r.question[:40] + "..." if len(r.question) > 40 else r.question
-        rag_result = "❌" if r.rag_is_hallucination else "✅"
-        prompt_result = "❌" if r.prompt_only_is_hallucination else "✅"
-        output += f"| {i} | {q_short} | {r.rag_score:.3f} | {rag_result} | {r.prompt_only_score:.3f} | {prompt_result} | {r.winner} |\n"
+        rag_fact = (
+            "✅"
+            if getattr(r, "rag_factual_consensus", None) is True
+            else "❌" if getattr(r, "rag_factual_consensus", None) is False else "N/A"
+        )
+        prompt_fact = (
+            "✅"
+            if getattr(r, "prompt_factual_consensus", None) is True
+            else "❌"
+            if getattr(r, "prompt_factual_consensus", None) is False
+            else "N/A"
+        )
+        output += (
+            f"| {i} | {q_short} | {rag_fact} | {prompt_fact} | {_resolve_factual_winner(r)} |\n"
+        )
+
+    output += "\n### Completeness Track (Primary)\n\n"
+    output += "| # | Question | RAG Completeness | Prompt Completeness |\n"
+    output += "|---|----------|------------------|---------------------|\n"
+    for i, r in enumerate(results, 1):
+        q_short = r.question[:40] + "..." if len(r.question) > 40 else r.question
+        output += (
+            f"| {i} | {q_short} | {getattr(r, 'rag_completeness', 'insufficient')} | "
+            f"{getattr(r, 'prompt_completeness', 'insufficient')} |\n"
+        )
+
+    output += "\n### Grounding Track (RAG)\n\n"
+    output += "| # | Question | Grounding Status | Grounding Score |\n"
+    output += "|---|----------|------------------|-----------------|\n"
+    for i, r in enumerate(results, 1):
+        q_short = r.question[:40] + "..." if len(r.question) > 40 else r.question
+        gscore = (
+            f"{r.rag_grounding_score:.3f}"
+            if getattr(r, "rag_grounding_score", None) is not None
+            else "N/A"
+        )
+        output += (
+            f"| {i} | {q_short} | {getattr(r, 'rag_grounding_status', 'unavailable')} | {gscore} |\n"
+        )
+
+    output += "\n### Evaluator Disagreement (Factual)\n\n"
+    output += "| # | Question | RAG Disagreement | Prompt Disagreement |\n"
+    output += "|---|----------|------------------|---------------------|\n"
+    for i, r in enumerate(results, 1):
+        q_short = r.question[:40] + "..." if len(r.question) > 40 else r.question
+        rag_d = (
+            f"{r.rag_factual_disagreement_rate:.2f}"
+            if getattr(r, "rag_factual_disagreement_rate", None) is not None
+            else "N/A"
+        )
+        prompt_d = (
+            f"{r.prompt_factual_disagreement_rate:.2f}"
+            if getattr(r, "prompt_factual_disagreement_rate", None) is not None
+            else "N/A"
+        )
+        output += f"| {i} | {q_short} | {rag_d} | {prompt_d} |\n"
+
+    # ==========================================================================
+    # Legacy Vectara Table (optional)
+    # ==========================================================================
+    if legacy_single_winner:
+        output += "\n### Legacy Vectara Hallucination Model Results\n\n"
+        output += "| # | Question | RAG Score | RAG | Prompt Score | Prompt | Winner |\n"
+        output += "|---|----------|-----------|-----|--------------|--------|--------|\n"
+
+        for i, r in enumerate(results, 1):
+            q_short = r.question[:40] + "..." if len(r.question) > 40 else r.question
+            rag_result = "❌" if r.rag_is_hallucination else "✅"
+            prompt_result = "❌" if r.prompt_only_is_hallucination else "✅"
+            output += f"| {i} | {q_short} | {r.rag_score:.3f} | {rag_result} | {r.prompt_only_score:.3f} | {prompt_result} | {r.winner} |\n"
 
     faithfulness_results = [r for r in results if r.rag_faithfulness_score is not None]
     if faithfulness_results:
@@ -182,19 +281,99 @@ def generate_markdown_table(results: List[ComparisonResult]) -> str:
     return output
 
 
-def generate_summary_stats(results: List[ComparisonResult]) -> str:
-    """Generate summary statistics including all evaluation methods."""
+def generate_summary_stats(
+    results: List[ComparisonResult],
+    legacy_single_winner: bool = False,
+) -> str:
+    """Generate summary statistics including primary dual-track and diagnostics."""
     total = len(results)
     evaluation_mode = results[0].evaluation_mode if results else "ground_truth"
+    analysis_version = results[0].analysis_version if results else "v2_dual_track"
+    factual_mode = results[0].factual_mode if results else "ground_truth"
+    diagnostic_mode = results[0].diagnostic_mode if results else "combined"
+
+    if total == 0:
+        return (
+            f"**Analysis Version:** `{analysis_version}`\n\n"
+            "**No results available.**"
+        )
+
+    # Dual-track factual consensus stats
+    rag_factual = sum(1 for r in results if r.rag_factual_consensus is True)
+    rag_factual_error = sum(1 for r in results if r.rag_factual_consensus is False)
+    prompt_factual = sum(1 for r in results if r.prompt_factual_consensus is True)
+    prompt_factual_error = sum(
+        1 for r in results if r.prompt_factual_consensus is False
+    )
+    factual_rag_wins = sum(1 for r in results if _resolve_factual_winner(r) == "RAG")
+    factual_prompt_wins = sum(
+        1 for r in results if _resolve_factual_winner(r) == "Prompt-Only"
+    )
+    factual_ties = sum(1 for r in results if _resolve_factual_winner(r) == "Tie")
+
+    # Completeness distributions
+    rag_complete = sum(1 for r in results if r.rag_completeness == "complete")
+    rag_partial = sum(1 for r in results if r.rag_completeness == "partial")
+    rag_insufficient = sum(
+        1 for r in results if r.rag_completeness == "insufficient"
+    )
+    prompt_complete = sum(
+        1 for r in results if r.prompt_completeness == "complete"
+    )
+    prompt_partial = sum(1 for r in results if r.prompt_completeness == "partial")
+    prompt_insufficient = sum(
+        1 for r in results if r.prompt_completeness == "insufficient"
+    )
+
+    # Grounding stats
+    rag_ground_faithful = sum(
+        1 for r in results if getattr(r, "rag_grounding_status", "") == "faithful"
+    )
+    rag_ground_non_faithful = sum(
+        1 for r in results if getattr(r, "rag_grounding_status", "") == "non_faithful"
+    )
+    rag_ground_unavailable = sum(
+        1 for r in results if getattr(r, "rag_grounding_status", "") == "unavailable"
+    )
+    grounding_scores = [
+        r.rag_grounding_score
+        for r in results
+        if getattr(r, "rag_grounding_score", None) is not None
+    ]
+    avg_grounding = (
+        (sum(grounding_scores) / len(grounding_scores)) if grounding_scores else 0.0
+    )
+
+    # Disagreement stats
+    rag_disagreement_values = [
+        r.rag_factual_disagreement_rate
+        for r in results
+        if r.rag_factual_disagreement_rate is not None
+    ]
+    prompt_disagreement_values = [
+        r.prompt_factual_disagreement_rate
+        for r in results
+        if r.prompt_factual_disagreement_rate is not None
+    ]
+    rag_disagreement_avg = (
+        sum(rag_disagreement_values) / len(rag_disagreement_values)
+        if rag_disagreement_values
+        else 0.0
+    )
+    prompt_disagreement_avg = (
+        sum(prompt_disagreement_values) / len(prompt_disagreement_values)
+        if prompt_disagreement_values
+        else 0.0
+    )
 
     # RAG stats (Vectara)
     rag_hallucinations = sum(1 for r in results if r.rag_is_hallucination)
-    rag_factual = total - rag_hallucinations
+    rag_factual_legacy = total - rag_hallucinations
     rag_avg_score = sum(r.rag_score for r in results) / total if total > 0 else 0
 
     # Prompt-only stats (Vectara)
     prompt_hallucinations = sum(1 for r in results if r.prompt_only_is_hallucination)
-    prompt_factual = total - prompt_hallucinations
+    prompt_factual_legacy = total - prompt_hallucinations
     prompt_avg_score = (
         sum(r.prompt_only_score for r in results) / total if total > 0 else 0
     )
@@ -205,19 +384,65 @@ def generate_summary_stats(results: List[ComparisonResult]) -> str:
     ties = sum(1 for r in results if r.winner == "Tie")
 
     output = f"""
-**Primary Evaluation Mode:** `{evaluation_mode}`
+**Analysis Version:** `{analysis_version}`  
+**Primary Factual Mode:** `{factual_mode}`  
+**Diagnostic Mode:** `{diagnostic_mode}`  
+**Legacy Evaluation Mode Field:** `{evaluation_mode}`
 
-## Summary Statistics (Vectara Model)
+## Factual Track Summary (Primary)
 
 | Metric | RAG (Wikidata) | Prompt-Only |
 |--------|----------------|-------------|
 | Total Tests | {total} | {total} |
 | Factual Responses | {rag_factual} | {prompt_factual} |
+| Factual Errors | {rag_factual_error} | {prompt_factual_error} |
+| Factual Error Rate | {rag_factual_error/total*100:.1f}% | {prompt_factual_error/total*100:.1f}% |
+
+## Factual Head-to-Head (Primary)
+
+| Winner | Count |
+|--------|-------|
+| RAG (Wikidata) | {factual_rag_wins} |
+| Prompt-Only | {factual_prompt_wins} |
+| Tie | {factual_ties} |
+
+## Completeness Track (Primary)
+
+| Metric | RAG (Wikidata) | Prompt-Only |
+|--------|----------------|-------------|
+| Complete | {rag_complete} | {prompt_complete} |
+| Partial | {rag_partial} | {prompt_partial} |
+| Insufficient | {rag_insufficient} | {prompt_insufficient} |
+
+## Grounding Track (RAG)
+
+| Metric | RAG |
+|--------|-----|
+| Faithful | {rag_ground_faithful} |
+| Non-Faithful | {rag_ground_non_faithful} |
+| Grounding Unavailable | {rag_ground_unavailable} |
+| Average Grounding Score | {avg_grounding:.3f} |
+
+## Evaluator Disagreement (Factual)
+
+| Metric | RAG | Prompt-Only |
+|--------|-----|-------------|
+| Avg Disagreement Rate | {rag_disagreement_avg:.3f} | {prompt_disagreement_avg:.3f} |
+"""
+
+    if legacy_single_winner:
+        output += f"""
+## Legacy Vectara Summary (Diagnostic)
+
+| Metric | RAG (Wikidata) | Prompt-Only |
+|--------|----------------|-------------|
+| Total Tests | {total} | {total} |
+| Factual Responses | {rag_factual_legacy} | {prompt_factual_legacy} |
 | Hallucinations | {rag_hallucinations} | {prompt_hallucinations} |
 | Hallucination Rate | {rag_hallucinations/total*100:.1f}% | {prompt_hallucinations/total*100:.1f}% |
 | Average Score | {rag_avg_score:.3f} | {prompt_avg_score:.3f} |
 
-## Head-to-Head (Vectara)
+## Legacy Head-to-Head (Vectara)
 
 | Winner | Count |
 |--------|-------|
@@ -263,25 +488,25 @@ def generate_summary_stats(results: List[ComparisonResult]) -> str:
         )
         judge_errors = sum(1 for r in judge_results if r.llm_judge_winner == "Error")
 
-        # Count hallucinations detected by judge
+        # Count factual errors detected by judge
         judge_rag_halluc = sum(
             1
             for r in judge_results
-            if r.llm_judge_result and r.llm_judge_result.rag_has_hallucination
+            if r.llm_judge_result and r.llm_judge_result.rag_has_factual_error
         )
         judge_prompt_halluc = sum(
             1
             for r in judge_results
-            if r.llm_judge_result and r.llm_judge_result.prompt_has_hallucination
+            if r.llm_judge_result and r.llm_judge_result.prompt_has_factual_error
         )
 
         output += f"""
-## LLM Judge Statistics ({OPENAI_JUDGE_MODEL})
+## LLM Judge Statistics ({OPENAI_JUDGE_MODEL}) (Diagnostic)
 
 | Metric | RAG (Wikidata) | Prompt-Only |
 |--------|----------------|-------------|
-| Hallucinations Detected | {judge_rag_halluc} | {judge_prompt_halluc} |
-| Hallucination Rate | {judge_rag_halluc/len(judge_results)*100:.1f}% | {judge_prompt_halluc/len(judge_results)*100:.1f}% |
+| Factual Errors Detected | {judge_rag_halluc} | {judge_prompt_halluc} |
+| Factual Error Rate | {judge_rag_halluc/len(judge_results)*100:.1f}% | {judge_prompt_halluc/len(judge_results)*100:.1f}% |
 
 ## Head-to-Head (LLM Judge)
 
@@ -430,15 +655,24 @@ def generate_summary_stats(results: List[ComparisonResult]) -> str:
     return output
 
 
-def generate_full_report(results: List[ComparisonResult]) -> str:
+def generate_full_report(
+    results: List[ComparisonResult],
+    legacy_single_winner: bool = False,
+) -> str:
     """Generate a complete markdown report."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     evaluation_mode = results[0].evaluation_mode if results else "ground_truth"
+    analysis_version = results[0].analysis_version if results else "v2_dual_track"
+    factual_mode = results[0].factual_mode if results else "ground_truth"
+    diagnostic_mode = results[0].diagnostic_mode if results else "combined"
 
     report = f"""# Hallucination Comparison Report
 
 **Generated:** {timestamp}
-**Primary Evaluation Mode:** `{evaluation_mode}`
+**Analysis Version:** `{analysis_version}`
+**Primary Factual Mode:** `{factual_mode}`
+**Diagnostic Mode:** `{diagnostic_mode}`
+**Legacy Evaluation Mode Field:** `{evaluation_mode}`
 
 ## Overview
 
@@ -449,13 +683,19 @@ This report compares two approaches to reducing LLM hallucinations:
 
 ## Results Table
 
-{generate_markdown_table(results)}
+{generate_markdown_table(results, legacy_single_winner=legacy_single_winner)}
 
-{generate_summary_stats(results)}
+{generate_summary_stats(results, legacy_single_winner=legacy_single_winner)}
 
 ## Detailed Results
 
 """
+
+    if legacy_single_winner:
+        report += (
+            "Note: This report includes both dual-track primary metrics and legacy "
+            "single-winner diagnostic tables for backward compatibility.\n\n"
+        )
 
     for i, r in enumerate(results, 1):
         rag_status = "❌ HALLUCINATION" if r.rag_is_hallucination else "✅ FACTUAL"
@@ -596,6 +836,7 @@ def save_benchmark_report(
     results: List[ComparisonResult],
     json_path: str = "benchmark_results.json",
     md_path: str = "benchmark_report.md",
+    legacy_single_winner: bool = False,
 ) -> None:
     """Save results to JSON and markdown files."""
     # Save JSON
@@ -605,7 +846,11 @@ def save_benchmark_report(
             "question": r.question,
             "description": r.description,
             "ground_truth": r.ground_truth,
+            "analysis_version": getattr(r, "analysis_version", "v2_dual_track"),
+            "benchmark_axis": getattr(r, "benchmark_axis", "dual_track"),
             "evaluation_mode": r.evaluation_mode,
+            "factual_mode": getattr(r, "factual_mode", "ground_truth"),
+            "diagnostic_mode": getattr(r, "diagnostic_mode", "combined"),
             "rag": {
                 "response": r.rag_response,
                 "retrieved_context": r.rag_retrieved_context,
@@ -613,6 +858,8 @@ def save_benchmark_report(
                 "is_hallucination": r.rag_is_hallucination,
                 "faithfulness_score": r.rag_faithfulness_score,
                 "faithfulness_is_hallucination": r.rag_faithfulness_is_hallucination,
+                "grounding_status": getattr(r, "rag_grounding_status", "unavailable"),
+                "grounding_score": getattr(r, "rag_grounding_score", None),
             },
             "prompt_only": {
                 "response": r.prompt_only_response,
@@ -620,6 +867,39 @@ def save_benchmark_report(
                 "is_hallucination": r.prompt_only_is_hallucination,
             },
             "vectara_winner": r.winner,
+            "factual_track": {
+                "winner": _resolve_factual_winner(r),
+                "rag": {
+                    "vectara_factual": getattr(r, "rag_factual_vectara", None),
+                    "llm_factual": getattr(r, "rag_factual_llm", None),
+                    "ragtruth_factual": getattr(r, "rag_factual_ragtruth", None),
+                    "consensus_factual": getattr(r, "rag_factual_consensus", None),
+                },
+                "prompt_only": {
+                    "vectara_factual": getattr(r, "prompt_factual_vectara", None),
+                    "llm_factual": getattr(r, "prompt_factual_llm", None),
+                    "ragtruth_factual": getattr(r, "prompt_factual_ragtruth", None),
+                    "consensus_factual": getattr(
+                        r, "prompt_factual_consensus", None
+                    ),
+                },
+            },
+            "completeness_track": {
+                "rag": getattr(r, "rag_completeness", "insufficient"),
+                "prompt_only": getattr(r, "prompt_completeness", "insufficient"),
+            },
+            "grounding_track": {
+                "rag_status": getattr(r, "rag_grounding_status", "unavailable"),
+                "rag_score": getattr(r, "rag_grounding_score", None),
+            },
+            "disagreement": {
+                "rag_factual_disagreement_rate": getattr(
+                    r, "rag_factual_disagreement_rate", None
+                ),
+                "prompt_factual_disagreement_rate": getattr(
+                    r, "prompt_factual_disagreement_rate", None
+                ),
+            },
         }
 
         # Add LLM Judge results if available
@@ -631,11 +911,17 @@ def save_benchmark_report(
                 "reasoning": judge.reasoning,
                 "rag_evaluation": {
                     "has_hallucination": judge.rag_has_hallucination,
+                    "has_factual_error": judge.rag_has_factual_error,
+                    "completeness": judge.rag_completeness,
+                    "missing_required_info": judge.rag_missing_required_info,
                     "details": judge.rag_hallucination_details,
                     "strengths": judge.rag_strengths,
                 },
                 "prompt_evaluation": {
                     "has_hallucination": judge.prompt_has_hallucination,
+                    "has_factual_error": judge.prompt_has_factual_error,
+                    "completeness": judge.prompt_completeness,
+                    "missing_required_info": judge.prompt_missing_required_info,
                     "details": judge.prompt_hallucination_details,
                     "strengths": judge.prompt_strengths,
                 },
@@ -672,6 +958,6 @@ def save_benchmark_report(
         json.dump(json_data, f, indent=2)
 
     # Save markdown report
-    report = generate_full_report(results)
+    report = generate_full_report(results, legacy_single_winner=legacy_single_winner)
     with open(md_path, "w") as f:
         f.write(report)

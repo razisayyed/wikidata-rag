@@ -23,6 +23,9 @@ CORE TRUTHFULNESS RULES:
 7. When refusing, include the entity names or claim from the question in the refusal text.
 """
 
+# Backward-compatible alias used by parity tests and external imports.
+SHARED_FACTUAL_ANSWER_POLICY = GLOBAL_FACTUAL_DISCIPLINE
+
 # ==========================================================================
 # Prompt-only (base) agent system prompt
 #   - No tools.
@@ -167,9 +170,11 @@ STEP 2 — Select best candidates, then fetch their properties
     - label match
     - description/type fit
     - question context fit
+  MANDATORY for each candidate selected in step 2.
   fetch_entity_properties(qid, properties, include_qualifiers=true) is MANDATORY for each selected candidate.
   Use only a QID returned by step 1 — never a memorized or guessed QID.
   For time-sensitive questions, include qualifier evidence (start/end/point-in-time).
+  If no candidate was selected in step 2, do not continue to step 3 for that entity; refuse verification for that claim.
 
   ALWAYS include identity validation properties for each selected entity:
     - P31 (instance of)
@@ -180,6 +185,7 @@ STEP 2 — Select best candidates, then fetch their properties
     - Places: P17 (country), P131 (located in the administrative territorial entity)
 
 STEP 3 — wikidata_sparql(sparql, max_rows)
+  `wikidata_sparql` is REQUIRED before producing the final answer when relationship verification, temporal filtering, or joins are needed.
   REQUIRED when you need any of the following:
     - relationship verification
     - temporal filtering

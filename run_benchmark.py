@@ -69,12 +69,36 @@ def main():
     parser.add_argument(
         "--eval-context-mode",
         choices=["ground_truth", "combined"],
+        default="combined",
+        help=(
+            "Diagnostic context mode: "
+            "'combined' (default, legacy ground truth + retrieved context) or "
+            "'ground_truth'. Primary factual track is configured via --factual-mode."
+        ),
+    )
+    parser.add_argument(
+        "--factual-mode",
+        choices=["ground_truth", "combined"],
         default="ground_truth",
         help=(
-            "Primary evaluation context mode: "
-            "'ground_truth' (default, scientifically cleaner) or "
-            "'combined' (legacy ground truth + retrieved context for RAG)."
+            "Primary factual evaluation mode (default: ground_truth). "
+            "In dual-track mode this controls the factual-consistency context."
         ),
+    )
+    parser.add_argument(
+        "--benchmark-axis",
+        choices=["dual_track", "legacy"],
+        default="dual_track",
+        help=(
+            "Benchmark evaluation axis. "
+            "'dual_track' (default) separates factuality and grounding; "
+            "'legacy' keeps older single-axis behavior."
+        ),
+    )
+    parser.add_argument(
+        "--legacy-single-winner",
+        action="store_true",
+        help="Include legacy single-winner tables in reports and console summaries.",
     )
     parser.add_argument(
         "--benchmark-temperature",
@@ -130,6 +154,8 @@ def main():
         test_cases=test_cases,
         threshold=args.threshold,
         eval_context_mode=args.eval_context_mode,
+        factual_mode=args.factual_mode,
+        benchmark_axis=args.benchmark_axis,
         ground_truth_style=args.ground_truth_style,
         max_ground_truth_facts=args.max_ground_truth_facts,
         benchmark_temperature=args.benchmark_temperature,
@@ -143,11 +169,25 @@ def main():
     print(f"\n{Colors.BOLD}{'=' * 60}{Colors.RESET}")
     print(f"{Colors.BOLD}COMPARISON COMPLETE{Colors.RESET}")
     print(f"{Colors.BOLD}{'=' * 60}{Colors.RESET}")
-    print(generate_comparison_table(results, use_emoji=False))
-    print(generate_summary_stats(results))
+    print(
+        generate_comparison_table(
+            results,
+            use_emoji=False,
+            legacy_single_winner=args.legacy_single_winner,
+        )
+    )
+    print(
+        generate_summary_stats(
+            results,
+            legacy_single_winner=args.legacy_single_winner,
+        )
+    )
 
     # Save reports
-    save_benchmark_report(results)
+    save_benchmark_report(
+        results,
+        legacy_single_winner=args.legacy_single_winner,
+    )
     print(
         f"\n{Colors.GREEN}Results saved to benchmark_results.json and benchmark_report.md{Colors.RESET}"
     )

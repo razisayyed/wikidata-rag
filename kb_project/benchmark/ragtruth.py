@@ -76,6 +76,69 @@ class RAGTruthResult:
         }
 
 
+_OMISSION_SIGNAL_PATTERNS = (
+    "omit",
+    "omits",
+    "omitted",
+    "incomplete",
+    "insufficiently comprehensive",
+    "fails to mention",
+    "missing",
+    "lacks",
+    "does not specify",
+    "not comprehensive",
+)
+_CONTRADICTION_SIGNAL_PATTERNS = (
+    "contradict",
+    "incorrect",
+    "false",
+    "fabricat",
+    "invent",
+    "not supported",
+    "unsupported",
+)
+
+
+def interpret_ragtruth_for_dual_track(result: RAGTruthResult) -> Dict[str, Any]:
+    """
+    Interpret RAGTruth output into dual-track labels.
+
+    Returns:
+        dict with keys:
+        - has_factual_error: bool
+        - completeness: complete|partial|insufficient
+    """
+    if result.error:
+        return {
+            "has_factual_error": False,
+            "completeness": "insufficient",
+        }
+
+    if not result.has_hallucination:
+        return {
+            "has_factual_error": False,
+            "completeness": "complete",
+        }
+
+    text_chunks = [result.analysis or ""]
+    text_chunks.extend(span.reason or "" for span in result.hallucinated_spans)
+    joined = " ".join(text_chunks).lower()
+
+    has_omission_signal = any(pat in joined for pat in _OMISSION_SIGNAL_PATTERNS)
+    has_contradiction_signal = any(pat in joined for pat in _CONTRADICTION_SIGNAL_PATTERNS)
+
+    if has_omission_signal and not has_contradiction_signal:
+        return {
+            "has_factual_error": False,
+            "completeness": "partial",
+        }
+
+    return {
+        "has_factual_error": True,
+        "completeness": "insufficient",
+    }
+
+
 # ==========================================================================
 # RAGTruth Prompt Templates
 # ==========================================================================

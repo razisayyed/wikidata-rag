@@ -57,7 +57,7 @@ class JudgeResult:
     winner: str  # "RAG", "Prompt-Only", "Tie", "Both-Bad", "Both-Good"
     confidence: str  # "High", "Medium", "Low"
 
-    # Individual evaluations
+    # Backward-compatible individual evaluations
     rag_has_hallucination: bool
     rag_hallucination_details: str
     rag_strengths: str
@@ -66,8 +66,17 @@ class JudgeResult:
     prompt_hallucination_details: str
     prompt_strengths: str
 
+    # Dual-track individual evaluations
+    rag_has_factual_error: bool = False
+    rag_completeness: str = "insufficient"  # complete|partial|insufficient
+    rag_missing_required_info: str = ""
+
+    prompt_has_factual_error: bool = False
+    prompt_completeness: str = "insufficient"  # complete|partial|insufficient
+    prompt_missing_required_info: str = ""
+
     # Reasoning
-    reasoning: str
+    reasoning: str = ""
 
     # Raw response for debugging
     raw_response: Optional[str] = None
@@ -87,30 +96,21 @@ class JudgeResult:
 # 4. Detect fabricated facts, dates, relationships
 # 5. Return structured JSON for easy parsing
 
-JUDGE_SYSTEM_PROMPT = """You are an expert fact-checker evaluating two AI responses for factual accuracy using YOUR OWN KNOWLEDGE.
+JUDGE_SYSTEM_PROMPT = """You are an expert fact-checker evaluating two AI responses.
 
-HALLUCINATION DEFINITION:
-- States false facts as true
-- Invents entities, events, or relationships
-- Attributes incorrect dates/numbers/details to real entities
-- Fabricates collaborations or connections
+You must output TWO independent judgments per response:
+1) FACTUAL ERROR: whether the response states any false/unsupported claim.
+2) COMPLETENESS: whether the response fully answers what was asked.
 
-NOT HALLUCINATION:
-- Stating "I don't know" or "I cannot verify" for unknown entities
-- Refusing to answer about fictional entities
-- Admitting appropriate uncertainty
+IMPORTANT POLICY:
+- Omitted required information is NOT automatically a factual error.
+- Omission should lower completeness instead.
+- Hallucination/factual-error means invented, contradictory, or unsupported claims.
+- A truthful refusal ("I cannot verify") for unknown entities is factual.
+- Scope discipline: extra details beyond the asked question are NOT a positive signal.
+- Risk awareness: unsupported/scope-bloating extra claims should count as negative behavior and potential factual error.
 
-YOUR TASK:
-Verify facts using a blend of the PROVIDED REFERENCE CONTEXT and YOUR KNOWLEDGE.
-Factual claims in the responses should be cross-referenced against the context when available.
-
-Hallucination priorities:
-1. Contradictions to the provided Reference Context.
-2. Fabrications of details not mentioned in current context but stated as fact.
-3. Appropriate refusal for unknown/fictional entities.
-4. Scope discipline: extra details beyond the question are risky (potential hallucination).
-
-You will evaluate: RAG Response vs Prompt-Only Response."""
+Use provided reference context first; use world knowledge as fallback only when needed."""
 
 
 def build_judge_prompt(
@@ -147,7 +147,9 @@ Analyze both responses for:
 1. Cross-referencing: Do they accurately reflect the provided REFERENCE CONTEXT?
 2. Fictional entity detection: (good responses state "cannot verify", not invent details)
 3. Fact verification: dates, places, accomplishments
-4. Fabrication: Penalize unsupported extra claims as hallucinations.
+4. Completeness: did the response answer all required parts of the question?
+5. Scope discipline: extra information must not improve the score.
+6. Penalize unsupported or unnecessary extra claims as risky behavior (potential hallucination/factual error).
 
 Respond with JSON in this format:
 ```json
@@ -155,20 +157,25 @@ Respond with JSON in this format:
     "winner": "<RAG|Prompt-Only|Tie|Both-Bad|Both-Good>",
     "confidence": "<High|Medium|Low>",
     "rag_evaluation": {{
+        "has_factual_error": <true|false>,
         "has_hallucination": <true|false>,
+        "completeness": "<complete|partial|insufficient>",
+        "missing_required_info": "<short missing info summary or 'None'>",
         "hallucination_details": "<specific issues or 'None detected'>",
         "strengths": "<what this response did well>"
     }},
     "prompt_evaluation": {{
+        "has_factual_error": <true|false>,
         "has_hallucination": <true|false>,
+        "completeness": "<complete|partial|insufficient>",
+        "missing_required_info": "<short missing info summary or 'None'>",
         "hallucination_details": "<specific issues or 'None detected'>",
         "strengths": "<what this response did well>"
     }},
     "reasoning": "<2-3 sentence explanation>"
 }}
 ```
-
-Note: Stating "I cannot verify" for fictional entities is CORRECT, not a failure."""
+Note: Missing details by itself should lower completeness, not trigger factual error."""
 
 
 # ==========================================================================
@@ -306,18 +313,70 @@ def parse_judge_response(raw_response: str) -> JudgeResult:
 
         data = json.loads(json_str)
 
-        rag_eval = data.get("rag_evaluation", {})
-        prompt_eval = data.get("prompt_evaluation", {})
+        rag_eval = data.get("rag_evaluation", {}) or {}
+        prompt_eval = data.get("prompt_evaluation", {}) or {}
+
+        def _as_bool(value: Any, default: bool = False) -> bool:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, str):
+                lowered = value.strip().lower()
+                if lowered in {"true", "yes", "1"}:
+                    return True
+                if lowered in {"false", "no", "0"}:
+                    return False
+            return default
+
+        def _normalize_completeness(value: Any) -> str:
+            candidate = str(value or "").strip().lower()
+            if candidate not in {"complete", "partial", "insufficient"}:
+                return "insufficient"
+            return candidate
+
+        rag_has_factual_error = _as_bool(
+            rag_eval.get("has_factual_error"),
+            default=_as_bool(rag_eval.get("has_hallucination"), False),
+        )
+        prompt_has_factual_error = _as_bool(
+            prompt_eval.get("has_factual_error"),
+            default=_as_bool(prompt_eval.get("has_hallucination"), False),
+        )
 
         return JudgeResult(
             winner=data.get("winner", "Error"),
             confidence=data.get("confidence", "Unknown"),
-            rag_has_hallucination=rag_eval.get("has_hallucination", False),
+            rag_has_hallucination=_as_bool(
+                rag_eval.get("has_hallucination"),
+                default=rag_has_factual_error,
+            ),
             rag_hallucination_details=rag_eval.get("hallucination_details", ""),
             rag_strengths=rag_eval.get("strengths", ""),
-            prompt_has_hallucination=prompt_eval.get("has_hallucination", False),
+            prompt_has_hallucination=_as_bool(
+                prompt_eval.get("has_hallucination"),
+                default=prompt_has_factual_error,
+            ),
             prompt_hallucination_details=prompt_eval.get("hallucination_details", ""),
             prompt_strengths=prompt_eval.get("strengths", ""),
+            rag_has_factual_error=rag_has_factual_error,
+            rag_completeness=_normalize_completeness(
+                rag_eval.get(
+                    "completeness",
+                    "insufficient" if rag_has_factual_error else "complete",
+                )
+            ),
+            rag_missing_required_info=str(
+                rag_eval.get("missing_required_info", "")
+            ).strip(),
+            prompt_has_factual_error=prompt_has_factual_error,
+            prompt_completeness=_normalize_completeness(
+                prompt_eval.get(
+                    "completeness",
+                    "insufficient" if prompt_has_factual_error else "complete",
+                )
+            ),
+            prompt_missing_required_info=str(
+                prompt_eval.get("missing_required_info", "")
+            ).strip(),
             reasoning=data.get("reasoning", ""),
         )
 
@@ -390,12 +449,18 @@ def format_judge_result_detailed(result: JudgeResult) -> str:
 **Reasoning:** {result.reasoning}
 
 **RAG Evaluation:**
-- Hallucination: {"Yes" if result.rag_has_hallucination else "No"}
+- Factual Error: {"Yes" if result.rag_has_factual_error else "No"}
+- Completeness: {result.rag_completeness}
+- Missing Required Info: {result.rag_missing_required_info or "None"}
+- Hallucination (legacy field): {"Yes" if result.rag_has_hallucination else "No"}
 - Details: {result.rag_hallucination_details}
 - Strengths: {result.rag_strengths}
 
 **Prompt-Only Evaluation:**
-- Hallucination: {"Yes" if result.prompt_has_hallucination else "No"}
+- Factual Error: {"Yes" if result.prompt_has_factual_error else "No"}
+- Completeness: {result.prompt_completeness}
+- Missing Required Info: {result.prompt_missing_required_info or "None"}
+- Hallucination (legacy field): {"Yes" if result.prompt_has_hallucination else "No"}
 - Details: {result.prompt_hallucination_details}
 - Strengths: {result.prompt_strengths}"""
 

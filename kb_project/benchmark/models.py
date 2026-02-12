@@ -43,27 +43,52 @@ class Colors:
 class ComparisonResult:
     """Holds results from testing both models on the same question."""
 
+    # Benchmark meta
     question: str
     description: str
     ground_truth: str
+    analysis_version: str = "v2_dual_track"
+    benchmark_axis: str = "dual_track"
+    evaluation_mode: str = "ground_truth"
+    factual_mode: str = "ground_truth"
+    diagnostic_mode: str = "combined"
 
     # RAG model results
-    rag_response: str
-    rag_retrieved_context: str
-    rag_score: float
-    rag_is_hallucination: bool
+    rag_response: str = ""
+    rag_retrieved_context: str = ""
+    rag_score: float = 0.0
+    rag_is_hallucination: bool = False
 
     # Prompt-only model results
-    prompt_only_response: str
-    prompt_only_score: float
-    prompt_only_is_hallucination: bool
+    prompt_only_response: str = ""
+    prompt_only_score: float = 0.0
+    prompt_only_is_hallucination: bool = False
 
-    # Benchmark metadata
-    evaluation_mode: str = "ground_truth"
-
-    # Secondary RAG-only faithfulness signal (retrieved evidence grounding)
+    # Secondary RAG-only grounding signal
     rag_faithfulness_score: Optional[float] = None
     rag_faithfulness_is_hallucination: Optional[bool] = None
+    rag_grounding_status: str = "unavailable"  # faithful|non_faithful|unavailable
+    rag_grounding_score: Optional[float] = None
+
+    # Per-evaluator factual labels
+    rag_factual_vectara: Optional[bool] = None
+    rag_factual_llm: Optional[bool] = None
+    rag_factual_ragtruth: Optional[bool] = None
+    prompt_factual_vectara: Optional[bool] = None
+    prompt_factual_llm: Optional[bool] = None
+    prompt_factual_ragtruth: Optional[bool] = None
+
+    # Consensus factual labels
+    rag_factual_consensus: Optional[bool] = None
+    prompt_factual_consensus: Optional[bool] = None
+
+    # Completeness labels
+    rag_completeness: str = "insufficient"
+    prompt_completeness: str = "insufficient"
+
+    # Disagreement rates
+    rag_factual_disagreement_rate: Optional[float] = None
+    prompt_factual_disagreement_rate: Optional[float] = None
 
     # LLM Judge results (optional, may be None if not run)
     llm_judge_result: Optional[JudgeResult] = None
@@ -77,18 +102,40 @@ class ComparisonResult:
     prompt_only_aimon_result: Optional[AimonResult] = None
 
     @property
+    def factual_winner(self) -> str:
+        """Winner according to factual-consensus track."""
+        rag = self.rag_factual_consensus
+        prompt = self.prompt_factual_consensus
+        if rag is None or prompt is None:
+            return "N/A"
+        if rag and not prompt:
+            return "RAG"
+        if prompt and not rag:
+            return "Prompt-Only"
+        return "Tie"
+
+    @property
     def winner(self) -> str:
-        """Determine which model performed better (Vectara-based)."""
+        """Backward-compatible winner property (factual consensus first)."""
+        if self.factual_winner != "N/A":
+            if self.factual_winner != "Tie":
+                return self.factual_winner
+            if self.rag_score > self.prompt_only_score:
+                return "RAG"
+            if self.prompt_only_score > self.rag_score:
+                return "Prompt-Only"
+            return "Tie"
+
+        # Legacy fallback
         if self.rag_is_hallucination and not self.prompt_only_is_hallucination:
             return "Prompt-Only"
-        elif not self.rag_is_hallucination and self.prompt_only_is_hallucination:
+        if not self.rag_is_hallucination and self.prompt_only_is_hallucination:
             return "RAG"
-        elif self.rag_score > self.prompt_only_score:
+        if self.rag_score > self.prompt_only_score:
             return "RAG"
-        elif self.prompt_only_score > self.rag_score:
+        if self.prompt_only_score > self.rag_score:
             return "Prompt-Only"
-        else:
-            return "Tie"
+        return "Tie"
 
     @property
     def llm_judge_winner(self) -> str:
@@ -110,36 +157,32 @@ class ComparisonResult:
 
         if rag_halluc and not prompt_halluc:
             return "Prompt-Only"
-        elif not rag_halluc and prompt_halluc:
+        if not rag_halluc and prompt_halluc:
             return "RAG"
-        elif not rag_halluc and not prompt_halluc:
-            # Both factual - compare by score (lower is better for hallucination score)
+        if not rag_halluc and not prompt_halluc:
             if (
                 self.rag_ragtruth_result.hallucination_score
                 < self.prompt_only_ragtruth_result.hallucination_score
             ):
                 return "RAG"
-            elif (
-                self.prompt_only_ragtruth_result.hallucination_score
-                < self.rag_ragtruth_result.hallucination_score
-            ):
-                return "Prompt-Only"
-            else:
-                return "Tie"
-        else:
-            # Both hallucinated - compare by score (lower is better)
             if (
-                self.rag_ragtruth_result.hallucination_score
-                < self.prompt_only_ragtruth_result.hallucination_score
-            ):
-                return "RAG"
-            elif (
                 self.prompt_only_ragtruth_result.hallucination_score
                 < self.rag_ragtruth_result.hallucination_score
             ):
                 return "Prompt-Only"
-            else:
-                return "Tie"
+            return "Tie"
+
+        if (
+            self.rag_ragtruth_result.hallucination_score
+            < self.prompt_only_ragtruth_result.hallucination_score
+        ):
+            return "RAG"
+        if (
+            self.prompt_only_ragtruth_result.hallucination_score
+            < self.rag_ragtruth_result.hallucination_score
+        ):
+            return "Prompt-Only"
+        return "Tie"
 
     @property
     def aimon_winner(self) -> str:
@@ -152,33 +195,29 @@ class ComparisonResult:
 
         if rag_halluc and not prompt_halluc:
             return "Prompt-Only"
-        elif not rag_halluc and prompt_halluc:
+        if not rag_halluc and prompt_halluc:
             return "RAG"
-        elif not rag_halluc and not prompt_halluc:
-            # Both factual - compare by score (lower is better for hallucination severity)
+        if not rag_halluc and not prompt_halluc:
             if (
                 self.rag_aimon_result.hallucination_severity
                 < self.prompt_only_aimon_result.hallucination_severity
             ):
                 return "RAG"
-            elif (
-                self.prompt_only_aimon_result.hallucination_severity
-                < self.rag_aimon_result.hallucination_severity
-            ):
-                return "Prompt-Only"
-            else:
-                return "Tie"
-        else:
-            # Both hallucinated - compare by score (lower is better)
             if (
-                self.rag_aimon_result.hallucination_severity
-                < self.prompt_only_aimon_result.hallucination_severity
-            ):
-                return "RAG"
-            elif (
                 self.prompt_only_aimon_result.hallucination_severity
                 < self.rag_aimon_result.hallucination_severity
             ):
                 return "Prompt-Only"
-            else:
-                return "Tie"
+            return "Tie"
+
+        if (
+            self.rag_aimon_result.hallucination_severity
+            < self.prompt_only_aimon_result.hallucination_severity
+        ):
+            return "RAG"
+        if (
+            self.prompt_only_aimon_result.hallucination_severity
+            < self.rag_aimon_result.hallucination_severity
+        ):
+            return "Prompt-Only"
+        return "Tie"

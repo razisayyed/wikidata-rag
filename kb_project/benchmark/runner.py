@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import shutil
 import textwrap
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..wikidata_rag_agent import build_agent
 from ..prompt_only_llm import (
@@ -25,7 +25,7 @@ from .evaluation import (
     evaluate_rag_faithfulness,
     build_primary_context,
 )
-from .ragtruth import RAGTruthEvaluator
+from .ragtruth import RAGTruthEvaluator, interpret_ragtruth_for_dual_track
 from .aimon import AimonEvaluator
 from .vectra import (
     GROUND_TRUTH_TEST_CASES,
@@ -36,6 +36,19 @@ from .vectra import (
 from .llm_judge import judge_responses
 
 VALID_GROUND_TRUTH_STYLES = {"concise", "rich"}
+VALID_COMPLETENESS_LABELS = {"complete", "partial", "insufficient"}
+COMPLETENESS_RANK = {"complete": 0, "partial": 1, "insufficient": 2}
+VALID_BENCHMARK_AXES = {"dual_track", "legacy"}
+OMISSION_PATTERNS = (
+    "omit",
+    "omits",
+    "omitted",
+    "incomplete",
+    "fails to mention",
+    "missing",
+    "lacks",
+    "insufficient",
+)
 
 
 # ==========================================================================
@@ -76,6 +89,68 @@ def build_reference_ground_truth(
         parts.extend(f"- {fact}" for fact in key_facts)
 
     return "\n".join(parts).strip()
+
+
+def _normalize_completeness(value: Optional[str]) -> str:
+    candidate = str(value or "").strip().lower()
+    if candidate not in VALID_COMPLETENESS_LABELS:
+        return "insufficient"
+    return candidate
+
+
+def _merge_completeness(*labels: Optional[str]) -> str:
+    normalized = [_normalize_completeness(v) for v in labels if v is not None]
+    if not normalized:
+        return "insufficient"
+    return max(normalized, key=lambda label: COMPLETENESS_RANK[label])
+
+
+def _consensus_factual(
+    vectara_vote: Optional[bool],
+    llm_vote: Optional[bool],
+    ragtruth_vote: Optional[bool],
+) -> Tuple[Optional[bool], Optional[float]]:
+    votes = [v for v in (vectara_vote, llm_vote, ragtruth_vote) if v is not None]
+    if not votes:
+        return None, None
+
+    true_count = sum(1 for vote in votes if vote)
+    false_count = len(votes) - true_count
+
+    if true_count == false_count:
+        consensus = llm_vote if llm_vote is not None else votes[0]
+    else:
+        consensus = true_count > false_count
+
+    disagreement = sum(1 for vote in votes if vote != consensus) / len(votes)
+    return consensus, disagreement
+
+
+def _has_grounding_evidence(sanitized_retrieved_context: str) -> bool:
+    """
+    Return True when retrieved context contains factual evidence.
+
+    Pure no-candidate signals should not be treated as available grounding.
+    """
+    context = (sanitized_retrieved_context or "").strip()
+    if not context:
+        return False
+
+    lines = [
+        line.strip()
+        for line in context.splitlines()
+        if line.strip() and not line.strip().startswith("[Tool:")
+    ]
+    if not lines:
+        return False
+    if all("NO CANDIDATES FOUND" in line.upper() for line in lines):
+        return False
+    return True
+
+
+def _is_omission_only_signal(text: str) -> bool:
+    lowered = (text or "").lower()
+    return any(pattern in lowered for pattern in OMISSION_PATTERNS)
 
 
 def _render_three_column_console_table(
@@ -211,7 +286,9 @@ def test_both_models(
     ragtruth_evaluator: Optional[RAGTruthEvaluator] = None,
     aimon_evaluator: Optional[AimonEvaluator] = None,
     threshold: float = 0.5,
-    eval_context_mode: str = "ground_truth",
+    eval_context_mode: str = "combined",
+    factual_mode: str = "ground_truth",
+    benchmark_axis: str = "dual_track",
     ground_truth_style: str = "concise",
     max_ground_truth_facts: Optional[int] = None,
     compute_rag_faithfulness: bool = True,
@@ -226,6 +303,22 @@ def test_both_models(
     Console output is minimal - shows only question and scores.
     Detailed information is saved to report files.
     """
+    axis = (benchmark_axis or "dual_track").strip().lower()
+    if axis not in VALID_BENCHMARK_AXES:
+        axis = "dual_track"
+
+    factual_mode_norm = (factual_mode or "ground_truth").strip().lower()
+    if factual_mode_norm not in {"ground_truth", "combined"}:
+        factual_mode_norm = "ground_truth"
+
+    diagnostic_mode_norm = (eval_context_mode or "combined").strip().lower()
+    if diagnostic_mode_norm not in {"ground_truth", "combined"}:
+        diagnostic_mode_norm = "combined"
+
+    primary_context_mode = (
+        factual_mode_norm if axis == "dual_track" else diagnostic_mode_norm
+    )
+
     # Test RAG model
     reference_ground_truth = build_reference_ground_truth(
         test_case=test_case,
@@ -240,7 +333,7 @@ def test_both_models(
         rag_agent,
         hallucination_model,
         threshold,
-        eval_context_mode=eval_context_mode,
+        eval_context_mode=primary_context_mode,
         verbose=False,
     )
 
@@ -251,15 +344,15 @@ def test_both_models(
         prompt_llm,
         hallucination_model,
         threshold,
-        eval_context_mode=eval_context_mode,
+        eval_context_mode=primary_context_mode,
         verbose=False,
     )
 
-    # Calculate reference context for LLM judge and other evaluators based on mode
+    # Primary reference context for factual-track evaluators
     primary_eval_context = build_primary_context(
         ground_truth=reference_ground_truth,
         retrieved_context=rag_result["retrieved_context"],
-        eval_context_mode=eval_context_mode,
+        eval_context_mode=primary_context_mode,
     )
 
     # Run LLM-as-a-judge evaluation if enabled
@@ -285,7 +378,7 @@ def test_both_models(
             response=rag_result["response"],
             ground_truth=reference_ground_truth,
             retrieved_context=rag_result["retrieved_context"],
-            eval_context_mode=eval_context_mode,
+            eval_context_mode=primary_context_mode,
             verbose=False,
         )
 
@@ -295,7 +388,7 @@ def test_both_models(
             response=prompt_result["response"],
             ground_truth=reference_ground_truth,
             retrieved_context="",  # No retrieved context for prompt-only
-            eval_context_mode=eval_context_mode,
+            eval_context_mode=primary_context_mode,
             verbose=False,
         )
 
@@ -310,7 +403,7 @@ def test_both_models(
             ground_truth=reference_ground_truth,
             retrieved_context=rag_result["retrieved_context"],
             response=rag_result["response"],
-            eval_context_mode=eval_context_mode,
+            eval_context_mode=diagnostic_mode_norm,
         )
 
         # Evaluate Prompt-Only response
@@ -319,12 +412,16 @@ def test_both_models(
             ground_truth=reference_ground_truth,
             retrieved_context="",  # No retrieved context for prompt-only
             response=prompt_result["response"],
-            eval_context_mode=eval_context_mode,
+            eval_context_mode=diagnostic_mode_norm,
         )
 
     rag_faithfulness_score = None
     rag_faithfulness_is_hallucination = None
-    if compute_rag_faithfulness:
+    rag_grounding_status = "unavailable"
+    rag_grounding_score = None
+    if compute_rag_faithfulness and _has_grounding_evidence(
+        rag_result["sanitized_retrieved_context"]
+    ):
         rag_faithfulness_result = evaluate_rag_faithfulness(
             response=rag_result["response"],
             retrieved_context=rag_result["sanitized_retrieved_context"],
@@ -336,11 +433,83 @@ def test_both_models(
             rag_faithfulness_is_hallucination = rag_faithfulness_result[
                 "is_hallucination"
             ]
+            rag_grounding_score = rag_faithfulness_score
+            rag_grounding_status = (
+                "non_faithful"
+                if rag_faithfulness_is_hallucination
+                else "faithful"
+            )
+
+    rag_factual_vectara = not rag_result["is_hallucination"]
+    prompt_factual_vectara = not prompt_result["is_hallucination"]
+
+    rag_factual_llm = None
+    prompt_factual_llm = None
+    rag_llm_completeness = None
+    prompt_llm_completeness = None
+    if llm_judge_result is not None and not llm_judge_result.error:
+        rag_factual_llm = not llm_judge_result.rag_has_factual_error
+        prompt_factual_llm = not llm_judge_result.prompt_has_factual_error
+        rag_llm_completeness = llm_judge_result.rag_completeness
+        prompt_llm_completeness = llm_judge_result.prompt_completeness
+
+        # Omission should affect completeness, not factual label.
+        if llm_judge_result.rag_has_factual_error and _is_omission_only_signal(
+            llm_judge_result.rag_hallucination_details
+        ):
+            rag_factual_llm = True
+            rag_llm_completeness = _merge_completeness(
+                rag_llm_completeness,
+                "partial",
+            )
+        if llm_judge_result.prompt_has_factual_error and _is_omission_only_signal(
+            llm_judge_result.prompt_hallucination_details
+        ):
+            prompt_factual_llm = True
+            prompt_llm_completeness = _merge_completeness(
+                prompt_llm_completeness,
+                "partial",
+            )
+
+    rag_factual_ragtruth = None
+    prompt_factual_ragtruth = None
+    rag_rt_completeness = None
+    prompt_rt_completeness = None
+    if rag_ragtruth_result is not None:
+        rag_rt_dual = interpret_ragtruth_for_dual_track(rag_ragtruth_result)
+        rag_factual_ragtruth = not rag_rt_dual["has_factual_error"]
+        rag_rt_completeness = rag_rt_dual["completeness"]
+    if prompt_only_ragtruth_result is not None:
+        prompt_rt_dual = interpret_ragtruth_for_dual_track(prompt_only_ragtruth_result)
+        prompt_factual_ragtruth = not prompt_rt_dual["has_factual_error"]
+        prompt_rt_completeness = prompt_rt_dual["completeness"]
+
+    rag_factual_consensus, rag_disagreement = _consensus_factual(
+        vectara_vote=rag_factual_vectara,
+        llm_vote=rag_factual_llm,
+        ragtruth_vote=rag_factual_ragtruth,
+    )
+    prompt_factual_consensus, prompt_disagreement = _consensus_factual(
+        vectara_vote=prompt_factual_vectara,
+        llm_vote=prompt_factual_llm,
+        ragtruth_vote=prompt_factual_ragtruth,
+    )
+
+    rag_completeness = _merge_completeness(rag_llm_completeness, rag_rt_completeness)
+    prompt_completeness = _merge_completeness(
+        prompt_llm_completeness,
+        prompt_rt_completeness,
+    )
 
     return ComparisonResult(
         question=test_case.question,
         description=test_case.description,
         ground_truth=reference_ground_truth,
+        analysis_version="v2_dual_track" if axis == "dual_track" else "v1_legacy",
+        benchmark_axis=axis,
+        evaluation_mode=primary_context_mode,
+        factual_mode=factual_mode_norm,
+        diagnostic_mode=diagnostic_mode_norm,
         # RAG results
         rag_response=rag_result["response"],
         rag_retrieved_context=rag_result["retrieved_context"],
@@ -350,9 +519,22 @@ def test_both_models(
         prompt_only_response=prompt_result["response"],
         prompt_only_score=prompt_result["score"],
         prompt_only_is_hallucination=prompt_result["is_hallucination"],
-        evaluation_mode=eval_context_mode,
         rag_faithfulness_score=rag_faithfulness_score,
         rag_faithfulness_is_hallucination=rag_faithfulness_is_hallucination,
+        rag_grounding_status=rag_grounding_status,
+        rag_grounding_score=rag_grounding_score,
+        rag_factual_vectara=rag_factual_vectara,
+        rag_factual_llm=rag_factual_llm,
+        rag_factual_ragtruth=rag_factual_ragtruth,
+        prompt_factual_vectara=prompt_factual_vectara,
+        prompt_factual_llm=prompt_factual_llm,
+        prompt_factual_ragtruth=prompt_factual_ragtruth,
+        rag_factual_consensus=rag_factual_consensus,
+        prompt_factual_consensus=prompt_factual_consensus,
+        rag_completeness=rag_completeness,
+        prompt_completeness=prompt_completeness,
+        rag_factual_disagreement_rate=rag_disagreement,
+        prompt_factual_disagreement_rate=prompt_disagreement,
         # LLM Judge results
         llm_judge_result=llm_judge_result,
         # RAGTruth results
@@ -372,7 +554,9 @@ def test_both_models(
 def run_comparison_suite(
     test_cases: Optional[List[TestCase]] = None,
     threshold: float = 0.5,
-    eval_context_mode: str = "ground_truth",
+    eval_context_mode: str = "combined",
+    factual_mode: str = "ground_truth",
+    benchmark_axis: str = "dual_track",
     ground_truth_style: str = "concise",
     max_ground_truth_facts: Optional[int] = None,
     benchmark_temperature: float = 0.0,
@@ -434,8 +618,13 @@ def run_comparison_suite(
     normalized_gt_style = (ground_truth_style or "concise").strip().lower()
     if normalized_gt_style not in VALID_GROUND_TRUTH_STYLES:
         normalized_gt_style = "concise"
+    axis = (benchmark_axis or "dual_track").strip().lower()
+    if axis not in VALID_BENCHMARK_AXES:
+        axis = "dual_track"
 
-    print(f"Primary evaluation mode: {eval_context_mode}")
+    print(f"Benchmark axis: {axis}")
+    print(f"Primary factual mode: {factual_mode}")
+    print(f"Diagnostic context mode: {eval_context_mode}")
     print(f"Ground-truth style: {normalized_gt_style}")
     if normalized_gt_style == "rich" and max_ground_truth_facts:
         print(f"Ground-truth fact cap: {max_ground_truth_facts}")
@@ -453,6 +642,8 @@ def run_comparison_suite(
             aimon_evaluator=aimon_evaluator,
             threshold=threshold,
             eval_context_mode=eval_context_mode,
+            factual_mode=factual_mode,
+            benchmark_axis=axis,
             ground_truth_style=normalized_gt_style,
             max_ground_truth_facts=max_ground_truth_facts,
             compute_rag_faithfulness=compute_rag_faithfulness,
@@ -495,6 +686,24 @@ def run_comparison_suite(
         print(f"  RAG:    {result.rag_score:.3f} {rag_status}")
         print(f"  Prompt: {result.prompt_only_score:.3f} {prompt_status}")
         print(f"  Winner: {result.winner}")
+        if result.benchmark_axis == "dual_track":
+            print(f"{Colors.BOLD}DUAL-TRACK:{Colors.RESET}")
+            rag_fact = "FACTUAL" if result.rag_factual_consensus else "FACTUAL-ERROR"
+            prompt_fact = (
+                "FACTUAL" if result.prompt_factual_consensus else "FACTUAL-ERROR"
+            )
+            print(
+                f"  Factual: RAG={rag_fact} Prompt={prompt_fact} → {result.factual_winner}"
+            )
+            print(
+                f"  Completeness: RAG={result.rag_completeness} Prompt={result.prompt_completeness}"
+            )
+            print(
+                f"  Disagreement: RAG={result.rag_factual_disagreement_rate:.2f} Prompt={result.prompt_factual_disagreement_rate:.2f}"
+                if result.rag_factual_disagreement_rate is not None
+                and result.prompt_factual_disagreement_rate is not None
+                else "  Disagreement: N/A"
+            )
         if result.rag_faithfulness_score is not None:
             faith_status = (
                 f"{Colors.RED}❌ HALLUC{Colors.RESET}"
@@ -504,6 +713,8 @@ def run_comparison_suite(
             print(
                 f"  RAG Faithfulness: {result.rag_faithfulness_score:.3f} {faith_status}"
             )
+        elif result.benchmark_axis == "dual_track":
+            print("  RAG Faithfulness: unavailable (no usable retrieved evidence)")
 
         # RAGTruth results
         if result.rag_ragtruth_result is not None:
@@ -565,16 +776,22 @@ def run_comparison_suite(
             else:
                 rag_status = (
                     f"{Colors.RED}❌ HALLUC{Colors.RESET}"
-                    if judge.rag_has_hallucination
+                    if judge.rag_has_factual_error
                     else f"{Colors.GREEN}✅ FACTUAL{Colors.RESET}"
                 )
                 prompt_status = (
                     f"{Colors.RED}❌ HALLUC{Colors.RESET}"
-                    if judge.prompt_has_hallucination
+                    if judge.prompt_has_factual_error
                     else f"{Colors.GREEN}✅ FACTUAL{Colors.RESET}"
                 )
                 print(f"  RAG:    {rag_status}")
+                print(
+                    f"    completeness={judge.rag_completeness}, missing={judge.rag_missing_required_info or 'None'}"
+                )
                 print(f"  Prompt: {prompt_status}")
+                print(
+                    f"    completeness={judge.prompt_completeness}, missing={judge.prompt_missing_required_info or 'None'}"
+                )
                 print(f"  Winner: {result.llm_judge_winner} ({judge.confidence})")
 
         print()
