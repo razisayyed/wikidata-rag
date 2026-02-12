@@ -112,11 +112,17 @@ def _render_three_column_console_table(
     row_count = max(len(gt_lines), len(rag_lines), len(prompt_lines))
 
     def _line(left: str, middle: str, right: str) -> str:
-        return (
-            f"|{left.ljust(col_width)}|{middle.ljust(col_width)}|{right.ljust(col_width)}|"
-        )
+        return f"|{left.ljust(col_width)}|{middle.ljust(col_width)}|{right.ljust(col_width)}|"
 
-    border = "+" + ("-" * col_width) + "+" + ("-" * col_width) + "+" + ("-" * col_width) + "+"
+    border = (
+        "+"
+        + ("-" * col_width)
+        + "+"
+        + ("-" * col_width)
+        + "+"
+        + ("-" * col_width)
+        + "+"
+    )
     header = _line("GROUND TRUTH", "RAG OUTPUT", "PROMPT-ONLY OUTPUT")
 
     rows = [border, header, border]

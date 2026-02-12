@@ -199,7 +199,6 @@ class RAGTruthEvaluator:
             **get_ollama_connection_kwargs(),
         )
 
-
     def _parse_json_response(self, raw_output: str) -> Tuple[Dict[str, Any], str]:
         """
         Extract and parse JSON from the LLM response.
