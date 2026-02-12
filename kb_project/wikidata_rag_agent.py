@@ -13,6 +13,7 @@ Key Difference from Original:
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Optional
 
 from langchain_core.messages import SystemMessage
@@ -31,10 +32,12 @@ from .utils.logging import (
     log_result,
     log_tool,
 )
+from .utils.messages import content_to_text
 from .prompts import WIKIDATA_SYSTEM_PROMPT
 from .settings import (
     DEFAULT_TEMPERATURE,
-    LLM_MODEL,
+    WIKIDATA_RAG_MODEL,
+    get_ollama_connection_kwargs,
 )
 from .tools import (
     fetch_entity_properties,
@@ -43,7 +46,7 @@ from .tools import (
     wikidata_sparql,
 )
 
-OLLAMA_MODEL = LLM_MODEL
+OLLAMA_MODEL = WIKIDATA_RAG_MODEL
 
 # ==========================================================================
 # Wikidata Property Catalog
@@ -51,6 +54,46 @@ OLLAMA_MODEL = LLM_MODEL
 # Complete catalog of properties the LLM can choose from based on question context
 
 logger = configure_logging()
+
+_PROCESS_TEXT_PATTERN = re.compile(
+    r"(?is)(based on the search results|next step\s*:|i (have )?identified .*?\(q\d+\)|"
+    r"\"name\"\s*:\s*\"(?:fetch_|search_|wikidata_sparql)|\"parameters\"\s*:)"
+)
+_QID_PATTERN = re.compile(r"\[?Q\d+\]?")
+_PAREN_NOTE_PATTERN = re.compile(r"\(\s*note:.*?\)", re.IGNORECASE | re.DOTALL)
+_META_LINE_PATTERN = re.compile(
+    r"(?i)\b(based on the (search|retrieved)|according to (wikidata|wikipedia)|"
+    r"i (will|can) (verify|check)|direct retrieval|common understanding)\b"
+)
+
+
+def is_process_message(text: str) -> bool:
+    """Return True when content looks like intermediate planning/tool orchestration."""
+    return bool(_PROCESS_TEXT_PATTERN.search((text or "").strip()))
+
+
+def finalize_agent_answer(answer: str, question: str) -> str:
+    """Remove output artifacts that should not appear in final user-facing answers."""
+    final_text = (answer or "").strip()
+    final_text = _PAREN_NOTE_PATTERN.sub("", final_text)
+    final_text = re.sub(r"\s+", " ", final_text).strip()
+
+    # Remove meta/process sentences while preserving factual/refusal content.
+    candidate_sentences = re.split(r"(?<=[.!?])\s+", final_text)
+    filtered = [s for s in candidate_sentences if s and not _META_LINE_PATTERN.search(s)]
+    if filtered:
+        final_text = " ".join(filtered).strip()
+
+    final_text = re.sub(
+        r"(?i)\s+based on (available evidence|available information).*$", "", final_text
+    ).strip()
+
+    question_lower = (question or "").lower()
+    qid_requested = "qid" in question_lower or "wikidata id" in question_lower
+    if not qid_requested:
+        final_text = _QID_PATTERN.sub("", final_text)
+        final_text = re.sub(r"\s{2,}", " ", final_text).strip()
+    return final_text
 
 
 # ==========================================================================
@@ -68,7 +111,11 @@ def build_agent(
     if not ChatOllama:
         raise ImportError("ChatOllama not available. Please check dependencies.")
 
-    llm = ChatOllama(model=model, temperature=temperature)
+    llm = ChatOllama(
+        model=model,
+        temperature=temperature,
+        **get_ollama_connection_kwargs(),
+    )
     tools = [
         search_entity_candidates,
         fetch_entity_properties,
@@ -112,17 +159,27 @@ def answer_question(
                     elif hasattr(msg, "content") and msg.content:
                         has_tool_calls = getattr(msg, "tool_calls", None)
                         if not has_tool_calls or len(has_tool_calls) == 0:
-                            final_answer = msg.content
+                            parsed = content_to_text(msg.content)
+                            if parsed and not is_process_message(parsed):
+                                final_answer = parsed
         print()
         log_result("Finished chain", "✅")
-        log_answer(final_answer)
-        return final_answer
+        cleaned_answer = finalize_agent_answer(str(final_answer), question)
+        log_answer(cleaned_answer)
+        return cleaned_answer
     else:
         result = graph.invoke({"messages": [("user", question)]})
         messages = result.get("messages", [])
+        fallback_answer = ""
         for msg in reversed(messages):
             if hasattr(msg, "content") and msg.content:
-                return msg.content
+                content = content_to_text(msg.content)
+                if not fallback_answer:
+                    fallback_answer = content
+                if not is_process_message(content):
+                    return finalize_agent_answer(content, question)
+        if fallback_answer:
+            return finalize_agent_answer(fallback_answer, question)
         return str(result)
 
 

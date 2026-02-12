@@ -7,11 +7,16 @@ Contains data structures used across the benchmark system.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from .aimon import AimonResult
-from .llm_judge import JudgeResult
-from .ragtruth import RAGTruthResult
+if TYPE_CHECKING:
+    from .aimon import AimonResult
+    from .llm_judge import JudgeResult
+    from .ragtruth import RAGTruthResult
+else:
+    AimonResult = Any
+    JudgeResult = Any
+    RAGTruthResult = Any
 
 
 # ==========================================================================
@@ -52,6 +57,13 @@ class ComparisonResult:
     prompt_only_response: str
     prompt_only_score: float
     prompt_only_is_hallucination: bool
+
+    # Benchmark metadata
+    evaluation_mode: str = "ground_truth"
+
+    # Secondary RAG-only faithfulness signal (retrieved evidence grounding)
+    rag_faithfulness_score: Optional[float] = None
+    rag_faithfulness_is_hallucination: Optional[bool] = None
 
     # LLM Judge results (optional, may be None if not run)
     llm_judge_result: Optional[JudgeResult] = None

@@ -38,24 +38,49 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-3. Make sure Ollama is available and pull the model used by default.
+3. Create your environment file.
+
+```bash
+cp .env.example .env
+```
+
+4. Edit `.env` with your values, then make sure Ollama is available and pull the model(s) you configured.
+`.env` is already ignored by git.
 
 ```bash
 ollama signin
-ollama pull gpt-oss:120b-cloud
+ollama pull qwen2.5:32b-instruct
 ```
 
 ## Environment Variables
+
+All variables can be set in `.env` (auto-loaded by the app).
 
 ### Required only for specific features
 
 - `OPENAI_API_KEY`
   - Required only when using `--llm-judge` (OpenAI-based LLM judge).
+- `HF_TOKEN`
+  - Optional but recommended for downloading HF-hosted models (e.g., Vectara/AIMon dependencies) with better rate limits.
 
 ### Optional
 
+- Model choices in `.env`:
+  - `LLM_MODEL` (general fallback)
+  - `WIKIDATA_RAG_MODEL` (main RAG agent)
+  - `PROMPT_ONLY_MODEL` (prompt-only baseline)
+  - `RAGTRUTH_MODEL` (RAGTruth evaluator on Ollama)
+  - `OPENAI_JUDGE_MODEL` (OpenAI judge model)
+  - `VECTARA_DEVICE` (device for Vectara evaluator: `auto|cuda|cpu|mps`)
+  - `AIMON_DEVICE` (device for AIMon evaluator: `auto|cuda|cpu|mps`)
+
 - `OLLAMA_HOST`
   - Use this if your Ollama server is not local/default (example: `http://your-host:11434`).
+- `OLLAMA_PORT`
+  - Optional fallback if `OLLAMA_HOST` is not set.
+- `OLLAMA_API_KEY`
+  - Use this for remote Ollama endpoints that require bearer auth.
+  - Requests should include: `Authorization: Bearer <OLLAMA_API_KEY>`.
 
 - LangSmith tracing (optional observability):
   - `LANGSMITH_TRACING=true`
@@ -77,6 +102,11 @@ This runs the built-in benchmark cases and saves:
 
 - `benchmark_results.json`
 - `benchmark_report.md`
+
+Defaults now prioritize scientific comparability:
+- Primary evaluation context mode: `ground_truth` (both models scored against curated references)
+- Secondary metric: RAG retrieval-faithfulness against sanitized retrieved evidence
+- Benchmark decoding temperature: `0.0` for both compared models
 
 ### Common benchmark variants
 
@@ -104,6 +134,24 @@ Disable RAGTruth evaluator:
 python run_benchmark.py --no-ragtruth
 ```
 
+Disable AIMon evaluator:
+
+```bash
+python run_benchmark.py --no-aimon
+```
+
+Use legacy combined context scoring mode:
+
+```bash
+python run_benchmark.py --eval-context-mode combined
+```
+
+Set benchmark decoding temperature:
+
+```bash
+python run_benchmark.py --benchmark-temperature 0.0
+```
+
 Set hallucination threshold:
 
 ```bash
@@ -127,6 +175,6 @@ python -c "from kb_project.wikidata_rag_agent import answer_question; print(answ
 
 ## Notes
 
-- The default model in code is `gpt-oss:120b-cloud` (`kb_project/settings.py`).
+- Model defaults are defined in `kb_project/settings.py` and can be overridden in `.env`.
 - Benchmark execution may download models/data depending on enabled evaluators.
 - Runtime logs are written under `logs/`.

@@ -24,12 +24,17 @@ from .utils.logging import (
     log_question,
     log_result,
 )
+from .utils.messages import content_to_text
 from .prompts import PROMPT_ONLY_SYSTEM_PROMPT
-from .settings import DEFAULT_TEMPERATURE, LLM_MODEL
+from .settings import (
+    DEFAULT_TEMPERATURE,
+    PROMPT_ONLY_MODEL,
+    get_ollama_connection_kwargs,
+)
 
 
 def build_prompt_only_agent(
-    model: str = LLM_MODEL,
+    model: str = PROMPT_ONLY_MODEL,
     temperature: float = DEFAULT_TEMPERATURE,
 ) -> Runnable:
     """
@@ -47,7 +52,11 @@ def build_prompt_only_agent(
     if not ChatOllama:
         raise ImportError("ChatOllama not available. Please check dependencies.")
 
-    llm = ChatOllama(model=model, temperature=temperature)
+    llm = ChatOllama(
+        model=model,
+        temperature=temperature,
+        **get_ollama_connection_kwargs(),
+    )
 
     if create_react_agent:
         return create_react_agent(
@@ -94,7 +103,9 @@ def answer_question_prompt_only(
                     messages = node_output.get("messages", [])
                     for msg in messages:
                         if hasattr(msg, "content") and msg.content:
-                            final_answer = msg.content
+                            parsed = content_to_text(msg.content)
+                            if parsed:
+                                final_answer = parsed
         else:
             # Fallback: invoke LL model directly with system+human messages
             messages = [
@@ -102,9 +113,11 @@ def answer_question_prompt_only(
                 HumanMessage(content=question),
             ]
             resp = agent.invoke(messages)
-            final_answer = resp.content if hasattr(resp, "content") else str(resp)
+            final_answer = (
+                content_to_text(resp.content) if hasattr(resp, "content") else str(resp)
+            )
 
-        final_answer = str(final_answer)
+        final_answer = content_to_text(final_answer)
 
         if verbose:
             log_result("Response generated.", "✅")
@@ -114,14 +127,18 @@ def answer_question_prompt_only(
     except Exception as e:
         # Safe fallback: try raw ChatOllama call
         if ChatOllama:
-            llm_raw = ChatOllama(model=LLM_MODEL, temperature=DEFAULT_TEMPERATURE)
+            llm_raw = ChatOllama(
+                model=PROMPT_ONLY_MODEL,
+                temperature=DEFAULT_TEMPERATURE,
+                **get_ollama_connection_kwargs(),
+            )
             messages = [
                 SystemMessage(content=PROMPT_ONLY_SYSTEM_PROMPT),
                 HumanMessage(content=question),
             ]
             resp = llm_raw.invoke(messages)
-            answer = resp.content if hasattr(resp, "content") else str(resp)
-            answer = str(answer)
+            answer = content_to_text(resp.content) if hasattr(resp, "content") else str(resp)
+            answer = content_to_text(answer)
             if verbose:
                 log_result("Fallback Response:", "⚠️")
                 log_answer(answer)

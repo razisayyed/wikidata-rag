@@ -22,8 +22,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from langchain_ollama import ChatOllama
-
+from ..settings import RAGTRUTH_MODEL, get_ollama_connection_kwargs
+from ..utils.imports import ChatOllama
 
 # ==========================================================================
 # Data Structures
@@ -170,7 +170,7 @@ class RAGTruthEvaluator:
 
     def __init__(
         self,
-        model_name: str = "gpt-oss:120b-cloud",
+        model_name: str = RAGTRUTH_MODEL,
         temperature: float = 0.1,
         strict_mode: bool = True,
     ):
@@ -186,10 +186,16 @@ class RAGTruthEvaluator:
         self.temperature = temperature
         self.strict_mode = strict_mode
 
+        if not ChatOllama:
+            raise ImportError(
+                "ChatOllama is not available. Install langchain-ollama (or compatible langchain-community backend)."
+            )
+
         self.llm = ChatOllama(
             model=model_name,
             temperature=temperature,
             name="RAGTruth-Evaluator",
+            **get_ollama_connection_kwargs(),
         )
 
     def _build_source_context(
@@ -385,7 +391,7 @@ _default_evaluator: Optional[RAGTruthEvaluator] = None
 
 
 def get_ragtruth_evaluator(
-    model_name: str = "gpt-oss:120b-cloud",
+    model_name: str = RAGTRUTH_MODEL,
     strict_mode: bool = True,
 ) -> RAGTruthEvaluator:
     """Get or create a RAGTruth evaluator instance."""
@@ -405,7 +411,7 @@ def evaluate_ragtruth(
     response: str,
     ground_truth: str,
     retrieved_context: str = "",
-    model_name: str = "gpt-oss:120b-cloud",
+    model_name: str = RAGTRUTH_MODEL,
     strict_mode: bool = True,
     verbose: bool = False,
 ) -> RAGTruthResult:
@@ -446,7 +452,7 @@ def demo():
     print("=" * 60)
 
     evaluator = RAGTruthEvaluator(
-        model_name="gpt-oss:120b-cloud",
+        model_name=RAGTRUTH_MODEL,
         strict_mode=True,
     )
 

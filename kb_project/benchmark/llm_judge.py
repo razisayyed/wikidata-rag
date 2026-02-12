@@ -1,7 +1,7 @@
 """
 LLM-as-a-Judge: OpenAI-based Hallucination Evaluation
 ======================================================
-Uses GPT-5.1 to evaluate and compare responses for hallucinations.
+Uses an OpenAI judge model to evaluate and compare responses for hallucinations.
 
 This provides a complementary evaluation signal to the Vectara model:
 - Vectara: Embedding-based similarity to context
@@ -19,6 +19,8 @@ import json
 import os
 from dataclasses import dataclass
 from typing import Optional, Any
+
+from ..settings import OPENAI_JUDGE_MODEL
 
 try:
     from langchain_openai import ChatOpenAI
@@ -164,7 +166,9 @@ Note: Stating "I cannot verify" for fictional entities is CORRECT, not a failure
 # ==========================================================================
 
 
-def get_llm_judge(model: str = "gpt-4o", temperature: float = 0.1) -> Optional[Any]:
+def get_llm_judge(
+    model: str = OPENAI_JUDGE_MODEL, temperature: float = 0.1
+) -> Optional[Any]:
     """
     Initialize ChatOpenAI client using API key from environment.
     """
@@ -187,7 +191,7 @@ def call_openai_judge(
     question: str,
     rag_response: str,
     prompt_only_response: str,
-    model: str = "gpt-4o",
+    model: str = OPENAI_JUDGE_MODEL,
     temperature: float = 0.1,
     verbose: bool = False,
 ) -> JudgeResult:
@@ -200,7 +204,7 @@ def call_openai_judge(
         question: The original question asked
         rag_response: Response from the RAG model
         prompt_only_response: Response from the prompt-only model
-        model: OpenAI model to use (default: gpt-4o for best judgment)
+        model: OpenAI model to use (configurable via OPENAI_JUDGE_MODEL)
         temperature: Low temperature for consistent evaluation
         verbose: Print debug information
 
@@ -329,13 +333,13 @@ def judge_responses(
     question: str,
     rag_response: str,
     prompt_only_response: str,
-    model: str = "gpt-5.1",
+    model: str = OPENAI_JUDGE_MODEL,
     verbose: bool = False,
 ) -> JudgeResult:
     """
     Main entry point for LLM-as-a-judge evaluation.
 
-    The judge uses GPT-5.1's own knowledge to verify facts - no ground truth needed.
+    The judge uses the configured OpenAI model's own knowledge to verify facts.
 
     Example usage:
         result = judge_responses(

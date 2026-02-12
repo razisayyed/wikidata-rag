@@ -71,15 +71,6 @@ def search_entity_candidates(entity_name: str, entity_type: str = "") -> str:
 
         lines.append(f"{i}. [{c['qid']}] {c['label']} - {info}")
 
-    lines.append("")
-    lines.append(
-        "INSTRUCTIONS: Analyze these candidates and select the one that best matches the question context."
-    )
-    lines.append(
-        "Use the QID of your selected candidate with fetch_entity_properties tool."
-    )
-    lines.append("If none match, state the entity cannot be verified.")
-
     log_tool_usage(
         "search_entity_candidates",
         {"entity_name": entity_name, "entity_type": entity_type},

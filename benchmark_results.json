@@ -1,0 +1,563 @@
+[
+  {
+    "question": "Who is Albert Einstein?",
+    "description": "Basic biographical question about a well-known scientist",
+    "ground_truth": "Albert Einstein was a German-born theoretical physicist who developed the theories of special relativity and general relativity, provided the quantum explanation of the photoelectric effect, and contributed foundational work to statistical mechanics, Brownian motion, and early quantum theory. He received the 1921 Nobel Prize in Physics for his explanation of the photoelectric effect. He was born on 14 March 1879 in Ulm, Kingdom of W\u00fcrttemberg (German Empire), and died on 18 April 1955 in Princeton, New Jersey, United States. He was a human, male. His parents were Hermann Einstein and Pauline Koch. He was married to Mileva Mari\u0107 (1903\u20131919) and later to Elsa Einstein (1919\u20131936). His children were Hans Albert Einstein, Eduard Einstein, and his daughter Lieserl Einstein, whose early life is documented through correspondence. He held German citizenship at birth, became Swiss in 1901, and American in 1940. He studied at ETH Zurich, earning a teaching diploma in physics and mathematics, and completed his doctorate at the University of Zurich under Alfred Kleiner. He worked at the Swiss Patent Office in Bern and held academic positions at the University of Zurich, Charles University in Prague, ETH Zurich, the Kaiser Wilhelm Institute for Physics in Berlin, and later the Institute for Advanced Study in Princeton. His notable scientific contributions include special relativity, general relativity, mass\u2013energy equivalence (E=mc\u00b2), the Einstein field equations, the explanation of the photoelectric effect, theoretical work on Brownian motion, Einstein coefficients, Bose\u2013Einstein statistics (with S. N. Bose), and the Einstein\u2013Rosen bridge (with Nathan Rosen). His doctoral students included Nathan Rosen and Ernst G. Straus, and he collaborated with scientists such as Marcel Grossmann, S. N. Bose, and Leo Szilard. He received major recognitions including the Copley Medal in 1925 and the Max Planck Medal in 1929. In 1905, his Annus Mirabilis, he published four revolutionary papers that transformed modern physics. He advocated for civil rights in the United States, supported W. E. B. Du Bois, signed the Einstein\u2013Szilard letter in 1939 urging U.S. research into nuclear chain reactions, supported the establishment of the Hebrew University of Jerusalem, and later declined the presidency of Israel in 1952. His brain was removed for scientific study after his death, an action that is historically documented and widely discussed. The chemical element einsteinium (atomic number 99) was named in his honor.",
+    "rag": {
+      "response": "Albert Einstein was a German-born theoretical physicist. He was born on March 14, 1879, in Ulm and died on April 18, 1955, in Princeton. His places of citizenship included the United States, Switzerland, Germany, Weimar Republic, and Kingdom of W\u00fcrttemberg. Einstein's occupation was that of a physicist.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nCANDIDATES for 'Albert Einstein' (10 found):\n\n1. [Q937] Albert Einstein - German-born theoretical physicist (1879\u20131955) (Type: human)\n2. [Q2464312] Albert Einstein's brain - preserved brain of scientist Albert Einstein (Type: human brain, particular anatomical entity)\n3. [Q17712] Albert Einstein Medal - science award (Type: medallion, science award)\n4. [Q577432] Albert Einstein Award - American science award for achievements in the natural sciences (1951\u20131979) (Type: science award)\n5. [Q577449] Albert Einstein ATV - European uncrewed cargo resupply spacecraft (Type: Automated Transfer Vehicle)\n6. [Q782022] Kalinga Prize - UNESCO science award (Type: science award)\n7. [Q1287930] Albert Einstein World Award of Science - Recognition and encouragement for scientific and technological research and development. (Type: science award)\n8. [Q1609378] Albert Einstein Science Park - research institute in Germany (Type: research institute, science park)\n9. [Q1630439] Albert Einstein Israelite Hospital - hospital in S\u00e3o Paulo, Brazil (Type: hospital)\n10. [Q1670676] Albert Einstein Peace Prize - peace prize awarded annually since 1980 by the Albert Einstein Peace Prize Foundation (Type: peace award)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: fetch_entity_properties]\nEntity: Albert Einstein\nQID: Q937\nDescription: German-born theoretical physicist (1879\u20131955)\n\nP569: date of birth \u2014 1879-03-14T00:00:00Z\nP570: date of death \u2014 1955-04-18T00:00:00Z\nP19: place of birth \u2014 Ulm\nP20: place of death \u2014 Princeton\nP27: country of citizenship:\n  - United States\n  - Switzerland\n  - Germany\n  - Weimar Republic\n  - Kingdom of W\u00fcrttemberg\nP21: sex or gender \u2014 male\nP106: occupation \u2014 physicist",
+      "score": 0.9208468198776245,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "Albert Einstein (1879\u20131955) was a theoretical physicist renowned for his contributions to the field of physics. He is best known for developing the theory of relativity and making significant contributions to the development of the theory of quantum mechanics. His mass-energy equivalence formula, E=mc\u00b2, is one of the most famous equations in science. Einstein received the Nobel Prize in Physics in 1921 for his services to theoretical physics and his discovery of the law of the photoelectric effect. He was also a prominent figure in the scientific community during the early 20th century and played a role in the development of the atomic bomb through signing a letter to President Franklin D. Roosevelt urging the United States to pursue research into nuclear weapons before Nazi Germany could develop them first.",
+      "score": 0.21956218779087067,
+      "is_hallucination": true
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response is consistent with the provided source context. No claims made in the response contradict or extend beyond the given facts about Albert Einstein.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": true,
+        "hallucination_score": 0.27106227106227104,
+        "span_count": 1,
+        "hallucinated_spans": [
+          {
+            "text": "played a role in the development of the atomic bomb through signing a letter to President Franklin D. Roosevelt urging the United States to pursue research into nuclear weapons before Nazi Germany could develop them first.",
+            "reason": "The source context mentions that Einstein signed the Einstein\u2013Szilard letter in 1939, but it does not specify that this was directed at President Franklin D. Roosevelt or that it urged the U.S. to pursue nuclear weapons research specifically against Nazi Germany."
+          }
+        ],
+        "analysis": "The response contains a significant claim about Albert Einstein's involvement in urging the United States to develop nuclear weapons before Nazi Germany, which is not supported by the provided source context. Other details are consistent with the given information.",
+        "case_label": "hallucinated",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.045654296875,
+        "hallucination_score": 0.045654296875,
+        "sentence_count": 0,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": true,
+        "hallucination_severity": 0.7265625,
+        "hallucination_score": 0.7265625,
+        "sentence_count": 4,
+        "hallucinated_sentences": [
+          {
+            "text": "He was also a prominent figure in the scientific community during the early 20th century and played a role in the development of the atomic bomb through signing a letter to President Franklin D. Roosevelt urging the United States to pursue research into nuclear weapons before Nazi Germany could develop them first.",
+            "probability": 0.96875,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "hallucinated",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "When was Marie Curie born and what were her major achievements?",
+    "description": "Specific biographical facts with dates",
+    "ground_truth": "Marie Curie was born on 7 November 1867 in Warsaw, then part of the Russian Empire (Congress Poland). She was a pioneering physicist and chemist best known for discovering the elements polonium and radium, developing the theory of radioactivity, establishing experimental techniques for isolating radioactive isotopes, and laying the foundations of nuclear physics, radiochemistry, and medical radiation therapy. She was a human, female. She died on 4 July 1934 in Passy, France, from aplastic anemia caused by prolonged exposure to radiation. Her parents were W\u0142adys\u0142aw Sk\u0142odowski and Bronis\u0142awa Sk\u0142odowska. She married Pierre Curie in 1895 and remained married until his death in 1906. She had two daughters, Ir\u00e8ne Joliot-Curie and \u00c8ve Curie. She studied at the clandestine Flying University in Warsaw and later at the University of Paris (Sorbonne), earning degrees in physics and mathematics. She held academic positions at the University of Paris and later directed research at the Radium Institute in Paris, becoming the first woman professor at the Sorbonne. Her scientific fields included radioactivity, experimental physics, and radiation chemistry. She received the 1903 Nobel Prize in Physics (shared with Pierre Curie and Henri Becquerel) for research on radiation phenomena, and the 1911 Nobel Prize in Chemistry for the discovery of radium and polonium and the isolation of radium. She was the first woman to win a Nobel Prize, the first person to win two Nobel Prizes, and the only person to win Nobel Prizes in two different scientific fields (Physics and Chemistry). She directed the development and deployment of mobile X-ray units during World War I, personally training operators and assisting with battlefield radiology. She also played a central role in establishing two major research centers\u2014the Radium Institute in Paris and a parallel institute in Warsaw\u2014both of which became leading hubs for nuclear science and medical radiology.",
+    "rag": {
+      "response": "Marie Curie was born on November 7, 1867. She was a physicist and chemist known for her notable work \"Treatise on Radioactivity.\"",
+      "retrieved_context": "[Tool: search_entity_candidates]\nCANDIDATES for 'Marie Curie' (10 found):\n\n1. [Q7186] Marie Curie - Polish-French physicist and chemist (1867\u20131934) (Type: human)\n2. [Q11563704] Toshiko Yuasa - Japanese physicist (1909-1980) (Type: human)\n3. [Q656313] Marie Curie High School - public high school in District 3, Ho Chi Minh City, Vietnam (Type: high school)\n4. [Q1548496] Marie-Curie-Gymnasium Dresden - gymnasium (Type: gymnasium)\n5. [Q1613719] Maria Curie-Sk\u0142odowska University - Polish university (Type: public university)\n6. [Q1897114] Marie-Curie-Gymnasium - school in Germany (Type: gymnasium)\n7. [Q1897118] Marie-Curie-Gymnasium D\u00fcsseldorf - high school in D\u00fcsseldorf, Germany (Type: gymnasium)\n8. [Q6762810] Marie Sk\u0142odowska-Curie Actions - research funder (Type: incentive program of the EU, research program)\n9. [Q15995281] Marie Curie Fellows Association - scientific organization (Type: international organization)\n10. [Q16997351] Marie Curie - charity in the UK (Type: charitable organization)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: fetch_entity_properties]\nEntity: Marie Curie\nQID: Q7186\nDescription: Polish-French physicist and chemist (1867\u20131934)\n\nP569: date of birth \u2014 1867-11-07T00:00:00Z\nP106: occupation:\n  - physicist\n  - chemist\n  - university teacher\nP800: notable work \u2014 Treatise on Radioactivity",
+      "score": 0.9083544611930847,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "Marie Curie was born on November 7, 1867, in Warsaw, Poland.\n\nHer major achievements include:\n\n- She was a pioneering researcher in radioactivity, a term she coined.\n- In 1903, she received the Nobel Prize in Physics along with her husband Pierre Curie and Henri Becquerel for their work on radioactivity.\n- In 1911, she won the Nobel Prize in Chemistry for her services to the advancement of chemistry by the discovery of the elements radium and polonium, by the isolation of radium and the study of the nature and compounds of this remarkable element. \n- She was the first woman to win a Nobel Prize and remains the only person to have won Nobel Prizes in two different scientific fields.\n- Curie's research contributed significantly to the development of X-rays in surgery.\n- She founded the Curie Institutes in Paris and Warsaw, which remain major centers of medical research today.",
+      "score": 0.4208727478981018,
+      "is_hallucination": true
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response correctly states Marie Curie's birth date and mentions her notable work 'Treatise on Radioactivity.' However, it does not provide a comprehensive list of her major achievements as detailed in the source context. Despite this omission, there are no explicit hallucinations.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": true,
+        "hallucination_score": 0.17042889390519186,
+        "span_count": 2,
+        "hallucinated_spans": [
+          {
+            "text": "She was a pioneering researcher in radioactivity, a term she coined.",
+            "reason": "The source context does not mention that Marie Curie coined the term 'radioactivity'."
+          },
+          {
+            "text": "Curie's research contributed significantly to the development of X-rays in surgery.",
+            "reason": "While it is mentioned that she directed mobile X-ray units during World War I, there is no specific claim about her research contributing to the development of X-rays in surgery."
+          }
+        ],
+        "analysis": "The response contains mostly accurate information but includes unsupported claims regarding coining the term 'radioactivity' and contributions to the development of X-rays in surgery.",
+        "case_label": "hallucinated",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.1875,
+        "hallucination_score": 0.1875,
+        "sentence_count": 1,
+        "hallucinated_sentences": [
+          {
+            "text": "Marie Curie was born on November 7, 1867.",
+            "probability": 0.87890625,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.3671875,
+        "hallucination_score": 0.3671875,
+        "sentence_count": 5,
+        "hallucinated_sentences": [
+          {
+            "text": "Her major achievements include:\n\n- She was a pioneering researcher in radioactivity, a term she coined.",
+            "probability": 0.71484375,
+            "is_common_knowledge": false
+          },
+          {
+            "text": "- In 1911, she won the Nobel Prize in Chemistry for her services to the advancement of chemistry by the discovery of the elements radium and polonium, by the isolation of radium and the study of the nature and compounds of this remarkable element.",
+            "probability": 0.703125,
+            "is_common_knowledge": false
+          },
+          {
+            "text": "- Curie's research contributed significantly to the development of X-rays in surgery.",
+            "probability": 0.94140625,
+            "is_common_knowledge": false
+          },
+          {
+            "text": "- She founded the Curie Institutes in Paris and Warsaw, which remain major centers of medical research today.",
+            "probability": 0.94140625,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "factual",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "What is the capital of France?",
+    "description": "Simple geographic fact",
+    "ground_truth": "Paris is the capital and largest city of France.",
+    "rag": {
+      "response": "The capital of France is Paris.",
+      "retrieved_context": "[Tool: fetch_entity_properties]\nEntity: France\nQID: Q142\nDescription: country in Western Europe and other continents (through its overseas territories in America, Africa and Oceania)\n\nP36: capital \u2014 Paris",
+      "score": 0.9489660859107971,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "The capital of France is Paris.",
+      "score": 0.8106947541236877,
+      "is_hallucination": false
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "Tie",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response correctly states that Paris is the capital of France, which aligns with both the ground truth and retrieved facts provided. No claims are made beyond what is supported by the source context.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response accurately states that Paris is the capital of France based on the provided source context without any additional claims or contradictions.",
+        "case_label": "factual",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "Prompt-Only",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.021728515625,
+        "hallucination_score": 0.021728515625,
+        "sentence_count": 0,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.0133056640625,
+        "hallucination_score": 0.0133056640625,
+        "sentence_count": 0,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "What is the relationship between Alan Turing and Dr. Helena Vargass?",
+    "description": "Mix of real and fictional entity - tests hallucination resistance",
+    "ground_truth": "There is no relationship between Alan Turing and Dr. Helena Vargass because Alan Turing is a real historical figure while Dr. Helena Vargass is not a real person. No historical, academic, scientific, or biographical records contain this name, so no connection of any kind exists. Alan Turing was a human mathematician, logician, cryptanalyst, computer scientist, and theoretical biologist. He was born on 23 June 1912 in Maida Vale, London, England, and died on 7 June 1954 in Wilmslow, Cheshire, England. He was male and held British citizenship. His parents were Julius Mathison Turing and Ethel Sara Turing. He never married and had no children. He studied at Sherborne School, then at King's College, Cambridge, where he completed major mathematical work, and later earned his PhD at Princeton University under Alonzo Church. He worked at King's College Cambridge, the Government Code and Cypher School at Bletchley Park during World War II, the National Physical Laboratory, and the University of Manchester. His fields of work included mathematical logic, computability theory, cryptanalysis, early computer architecture, and developmental biology. His notable achievements included the formulation of the universal Turing machine, foundational contributions to computation theory, major contributions to breaking the German Enigma cipher during World War II, and the proposal of the Turing Test for machine intelligence. He was elected a Fellow of the Royal Society in 1951. In 1952, Turing was prosecuted for homosexual acts and forced to undergo chemical castration; he died by suicide in 1954, and was posthumously pardoned by the British government in 2013. Dr. Helena Vargass is fictional, and therefore no factual properties can be provided for this entity.",
+    "rag": {
+      "response": "Alan Turing can be identified as [Q7251], an English computer scientist (1912\u20131954). However, Dr. Helena Vargass cannot be verified in Wikidata. Therefore, the relationship between Alan Turing and Dr. Helena Vargass cannot be determined based on available information.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nCANDIDATES for 'Alan Turing' (10 found):\n\n1. [Q7251] Alan Turing - English computer scientist (1912\u20131954) (Type: human)\n2. [Q28846012] Alan Turing - fictional analogon of Alan Turing (1912-1954) (Type: fictional human, film character)\n3. [Q3736114] Alan Turing Memorial - memorial in Manchester, England (Type: sculpture, LGBT monument or memorial)\n4. [Q4707938] Alan Turing Centenary Conference - Computer Science Conference celebrating Alan Turing in his centenary year (Type: recurring event)\n5. [Q4707939] Alan Turing Building - University building at the University of Manchester (Type: building)\n6. [Q4707947] Alan Turing Year - international observance (Type: world day)\n7. [Q16826821] Alan Turing Institute - research institute in Britain (Type: research institute)\n8. [Q17601707] Alan Turing given posthumous pardon - Wikinews article (Type: Wikinews article)\n9. [Q17654894] Alan Turing Building opens at University of Manchester - Wikinews article (Type: Wikinews article)\n10. [Q18574712] Alan Turing: The Enigma - Type: version, edition or translation\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: search_entity_candidates]\nNO CANDIDATES FOUND for 'Dr. Helena Vargass'. Entity cannot be verified in Wikidata.",
+      "score": 0.9885421991348267,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "I don't have verified information about a relationship between Alan Turing and Dr. Helena Vargass. Alan Turing is a well-known mathematician and computer scientist, but I cannot verify that this entity exists: Dr. Helena Vargass.",
+      "score": 0.939836859703064,
+      "is_hallucination": false
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "Tie",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response accurately identifies Alan Turing using his Wikidata QID and correctly states that Dr. Helena Vargass cannot be verified, leading to an appropriate conclusion about the lack of a determinable relationship between them based on available information.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response correctly admits uncertainty about the relationship between Alan Turing and Dr. Helena Vargass, aligning with the source context which states that no such person exists.",
+        "case_label": "factual",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.28125,
+        "hallucination_score": 0.28125,
+        "sentence_count": 1,
+        "hallucinated_sentences": [
+          {
+            "text": "Alan Turing can be identified as [Q7251], an English computer scientist (1912\u20131954).",
+            "probability": 0.8046875,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": true,
+        "hallucination_severity": 0.537109375,
+        "hallucination_score": 0.537109375,
+        "sentence_count": 2,
+        "hallucinated_sentences": [],
+        "case_label": "hallucinated",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "Tell me about the collaboration between Dr. Liora Anstrum and Prof. Armin Delacroix.",
+    "description": "Entirely fictional entities - should refuse to provide details",
+    "ground_truth": "There is no collaboration between Dr. Liora Anstrum and Prof. Armin Delacroix because both names refer to fictional individuals. No historical, academic, scientific, or publicly documented persons exist with these names, and therefore no factual properties, biographical details, or real-world collaborations can be provided.",
+    "rag": {
+      "response": "Entity Dr. Liora Anstrum cannot be verified.  \nEntity Prof. Armin Delacroix cannot be verified.\n\nI cannot verify this information as both entities involved, Dr. Liora Anstrum and Prof. Armin Delacroix, could not be found in Wikidata.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nNO CANDIDATES FOUND for 'Dr. Liora Anstrum'. Entity cannot be verified in Wikidata.\n\n[Tool: search_entity_candidates]\nNO CANDIDATES FOUND for 'Prof. Armin Delacroix'. Entity cannot be verified in Wikidata.",
+      "score": 0.9199569225311279,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "I don't have verified information about a collaboration between Dr. Liora Anstrum and Prof. Armin Delacroix. I cannot verify that these entities exist or have collaborated together.",
+      "score": 0.9386981129646301,
+      "is_hallucination": false
+    },
+    "vectara_winner": "Prompt-Only",
+    "ragtruth": {
+      "winner": "Tie",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response correctly admits uncertainty about verifying information on Dr. Liora Anstrum and Prof. Armin Delacroix, which aligns with the source context indicating these are fictional entities.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response correctly admits uncertainty about any collaboration between Dr. Liora Anstrum and Prof. Armin Delacroix, aligning with the source context that these individuals are fictional.",
+        "case_label": "factual",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "Prompt-Only",
+      "rag_evaluation": {
+        "has_hallucination": true,
+        "hallucination_severity": 0.5947265625,
+        "hallucination_score": 0.5947265625,
+        "sentence_count": 2,
+        "hallucinated_sentences": [],
+        "case_label": "hallucinated",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.439453125,
+        "hallucination_score": 0.439453125,
+        "sentence_count": 2,
+        "hallucinated_sentences": [
+          {
+            "text": "I don't have verified information about a collaboration between Dr. Liora Anstrum and Prof. Armin Delacroix.",
+            "probability": 0.75,
+            "is_common_knowledge": false
+          },
+          {
+            "text": "I cannot verify that these entities exist or have collaborated together.",
+            "probability": 0.7890625,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "factual",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "Describe the joint research between Einstein, Bohr, and Dr. Selwyn Hartmere on quantum mechanics.",
+    "description": "Real scientists mixed with fictional - partial hallucination trap",
+    "ground_truth": "There was no joint research between Albert Einstein, Niels Bohr, and Dr. Selwyn Hartmere because Dr. Selwyn Hartmere is not a real person and therefore no collaboration involving this fictional name ever existed. Albert Einstein and Niels Bohr were real physicists, but they did not conduct joint research together; instead, they engaged in famous scientific and philosophical debates about quantum mechanics, especially at the Solvay Conferences in the 1920s and 1930s. Their interactions were intellectual arguments over foundational issues such as determinism and the Copenhagen interpretation, not co-authored work or shared experiments. Albert Einstein was a human theoretical physicist born on 14 March 1879 in Ulm, Kingdom of W\u00fcrttemberg, German Empire, and he died on 18 April 1955 in Princeton, New Jersey, United States. He held German, Swiss, and American citizenships, was male, and his occupations included theoretical physicist and professor. His parents were Hermann Einstein and Pauline Koch. He married Mileva Mari\u0107 and later Elsa Einstein and had two sons, Hans Albert Einstein and Eduard Einstein. He studied at ETH Zurich and held academic positions at the University of Zurich, Charles University in Prague, ETH Zurich, the Kaiser Wilhelm Institute for Physics, and the Institute for Advanced Study in Princeton. His scientific fields included relativity, quantum theory, statistical physics, and cosmology, and his major achievements included special relativity, general relativity, the photoelectric effect, and foundational contributions to early quantum physics. He received the 1921 Nobel Prize in Physics, the Copley Medal, and the Max Planck Medal. Niels Bohr was a human theoretical physicist born on 7 October 1885 in Copenhagen, Denmark, where he also died on 18 November 1962. He held Danish citizenship, was male, and his parents were Christian Bohr and Ellen Adler Bohr. He married Margrethe N\u00f8rlund and had children including Aage Bohr, who became a Nobel laureate. Niels Bohr studied at the University of Copenhagen and worked with J. J. Thomson and Ernest Rutherford in Cambridge and Manchester. He founded the Institute for Theoretical Physics (now the Niels Bohr Institute) at the University of Copenhagen. His scientific fields included atomic structure, quantum theory, and nuclear physics. His major achievements included the Bohr model of the atom, foundational contributions to quantum mechanics, and the principle of complementarity. He received the 1922 Nobel Prize in Physics and numerous international honors, and he later contributed as a scientific advisor to the Allied nuclear effort during World War II. Because Dr. Selwyn Hartmere does not exist, no factual properties or collaborations can be attributed to this name.",
+    "rag": {
+      "response": "Albert Einstein (Q937) and Niels Bohr (Q141756) are well-known figures in the history of quantum mechanics, but there is no verifiable entity named \"Dr. Selwyn Hartmere\" found in Wikidata.\n\nEinstein and Bohr were indeed involved in significant discussions and debates about quantum mechanics, particularly regarding the interpretation of quantum theory and its implications for the nature of reality. However, since Dr. Selwyn Hartmere cannot be verified as a real historical figure, any joint research between Einstein, Bohr, and this individual cannot be confirmed.\n\nTherefore, I can describe the interactions and disagreements between Einstein and Bohr on quantum mechanics but not include Dr. Selwyn Hartmere in these discussions due to lack of evidence for their existence or contributions.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nCANDIDATES for 'Einstein' (10 found):\n\n1. [Q937] Albert Einstein - German-born theoretical physicist (1879\u20131955) (Type: human)\n2. [Q1892] einsteinium - chemical element with symbol Es and atomic number 99 (Type: chemical element, synthetic element)\n3. [Q11452] general relativity - standard and classical physics theory of gravity and space (Type: physical law, scientific theory)\n4. [Q17712] Albert Einstein Medal - science award (Type: medallion, science award)\n5. [Q35875] mass\u2013energy equivalence - physical law relating mass to energy (Type: mathematical concept, concept in physics)\n6. [Q43514] theory of relativity - two interrelated physics theories by Albert Einstein (Type: scientific theory, branch of physics)\n7. [Q59151] cosmological constant - constant representing stress-energy density of the vacuum in Einstein's equation, which accounts for the rate of expansion of the universe (Type: physical constant)\n8. [Q146709] 2001 Einstein - Inner main belt asteroid (Type: asteroid)\n9. [Q214975] EPR paradox - early and influential critique leveled against quantum mechanics (Type: thought experiment)\n10. [Q273711] Einstein field equations - field equations in general relativity (Type: physical law, scientific theory)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: search_entity_candidates]\nCANDIDATES for 'Bohr' (10 found):\n\n1. [Q1249] bohrium - chemical element with symbol Bh and atomic number 107 (Type: chemical element, synthetic element)\n2. [Q61604] Q61604 - German politician (SPD) and mayor of Bremen (2005-) (Type: human)\n3. [Q141756] Q141756 - asteroid (Type: asteroid)\n4. [Q172948] Bohr model - atomic model introduced by Niels Bohr in 1913 (Type: atom model)\n5. [Q360686] Bohr-Sommerfeld atom model - extension of the Bohr model to allow elliptical orbits of electrons around an atomic nucleus (Type: atom model)\n6. [Q566555] Bohren & der Club of Gore - band (Type: musical group)\n7. [Q652571] Bohr radius - physical constant; the most probable distance between an electron and the nucleus in a nonrelativistic model of the hydrogen atom with infinitely heavy nucleus (Type: physical constant, unit of length)\n8. [Q737120] Bohr magneton - unit of magnetic moment (approx. 9.2 J/T); the magnetic dipole moment of an electron orbiting an atom with angular momentum \u210f in the Bohr model (Type: physical constant, unit of magnetic moment)\n9. [Q783120] Q783120 - asteroid (Type: asteroid)\n10. [Q871502] Hans Bohrdt - German painter (1857-1945) (Type: human)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: search_entity_candidates]\nNO CANDIDATES FOUND for 'Dr. Selwyn Hartmere'. Entity cannot be verified in Wikidata.",
+      "score": 0.8198602199554443,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "I can provide information about the contributions of Albert Einstein and Niels Bohr to quantum mechanics, but I cannot verify that a joint research project involving both Einstein, Bohr, and Dr. Selwyn Hartmere exists.\n\nAlbert Einstein and Niels Bohr were prominent figures in the development of quantum mechanics during the early 20th century. They had differing views on the interpretation of quantum theory, with Einstein famously skeptical about some aspects of quantum mechanics, particularly its probabilistic nature and the concept of entanglement. Their debates were influential but did not involve joint research projects.\n\nRegarding Dr. Selwyn Hartmere, I cannot verify that this individual exists or has contributed to research in quantum mechanics alongside Einstein and Bohr.",
+      "score": 0.4654829800128937,
+      "is_hallucination": true
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "Tie",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response correctly admits uncertainty regarding Dr. Selwyn Hartmere's existence and does not introduce any unsupported claims about joint research involving this fictional character or make unsupported generalizations beyond the provided source context.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response correctly admits uncertainty regarding Dr. Selwyn Hartmere and accurately describes the relationship between Einstein and Bohr without making unsupported claims.",
+        "case_label": "factual",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.0526123046875,
+        "hallucination_score": 0.0526123046875,
+        "sentence_count": 4,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.244873046875,
+        "hallucination_score": 0.244873046875,
+        "sentence_count": 5,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "Compare the contributions of Ada Lovelace and Charles Babbage to computing.",
+    "description": "Comparison of two related historical figures",
+    "ground_truth": "Ada Lovelace and Charles Babbage made foundational but distinct contributions to the early history of computing. Charles Babbage, a human mathematician, inventor, and mechanical engineer, conceived the Difference Engine and designed the Analytical Engine, introducing key architectural principles of modern computers including a memory store, a processing unit (the mill), conditional branching, loops, and programmable operations. (His pioneering work has earned him recognition as the 'father of the computer'.) Ada Lovelace, a human mathematician and writer, studied the Analytical Engine, translated and expanded Luigi Menabrea\u2019s paper on it, and added extensive annotations that included the algorithm for computing Bernoulli numbers\u2014widely regarded as the first published computer program, making Lovelace widely regarded as the world\u2019s first computer programmer. Lovelace also articulated the theoretical insight that the machine could manipulate symbols beyond numerical calculation, envisioning general-purpose computing and early notions of software. Ada Lovelace was born on 10 December 1815 in London, England, died on 27 November 1852 in Marylebone, London, held British citizenship, was female, and her parents were Lord George Gordon Byron and Anne Isabella Milbanke Byron. She married William King-Noel, later Earl of Lovelace, and had three children: Byron, Anne Isabella, and Ralph. She studied mathematics privately under mentors such as Augustus De Morgan and Mary Somerville and worked primarily as an independent thinker. Her fields included mathematics and early computational theory. Charles Babbage was born on 26 December 1791 in London, England, died on 18 October 1871 in London, held British citizenship, was male, and his parents were Benjamin Babbage and Betsy Plumleigh Teape. He married Georgiana Whitmore and had several children. He studied at Trinity College and Peterhouse, Cambridge, later became Lucasian Professor of Mathematics, and worked on mechanical computation, mathematical tables, and precision engineering. He is often regarded as the 'father of the computer' for his pioneering inventions. His designs for the Analytical Engine influenced later generations of computer scientists and historians. Babbage provided the conceptual hardware architecture of computing, while Lovelace contributed the earliest software concepts and theoretical understanding of symbolic computation, and they collaborated intellectually on the Analytical Engine project.",
+    "rag": {
+      "response": "Ada Lovelace and Charles Babbage both made significant contributions to early computing. Ada Lovelace is known for her work as a mathematician and computer scientist, though specific notable works are not listed in the available data. She is particularly recognized for her notes on Charles Babbage's analytical engine, where she described an algorithm intended to be processed by a machine, which is considered one of the first descriptions of a computer program.\n\nCharles Babbage, also a mathematician and engineer, is renowned for his conceptualization of the difference engine and the analytical engine. The difference engine was designed to tabulate polynomial functions, while the more advanced analytical engine could perform any arithmetic operation specified by a program of instructions. His notable works include \"The Ninth Bridgewater Treatise,\" \"Reflections on the Decline of Science in England, and on Some of Its Causes,\" and \"On the Economy of Machinery and Manufactures.\"\n\nIn summary, Charles Babbage's contributions were primarily in designing early mechanical computers like the difference engine and analytical engine, while Ada Lovelace is celebrated for her theoretical work and algorithmic insights related to these machines.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nCANDIDATES for 'Ada Lovelace' (10 found):\n\n1. [Q7259] Ada Lovelace - English mathematician (1815\u20131852) (Type: human)\n2. [Q3611580] Ada Lovelace\u2019 algorithm for computing Bernoulli numbers - algorithm (Type: algorithm)\n3. [Q30128828] Ada Lovelace Award - award for women in computing (Type: award)\n4. [Q55393255] Q55393255 - (no description)\n5. [Q66232516] Ada Lovelace Church of England High School - school in Ealing, UK (Type: secondary school, free school)\n6. [Q86050625] Rue Ada-Lovelace - street of Paris, France (Type: street)\n7. [Q87282992] Ada Lovelace - episode of In Our Time (Type: radio series episode)\n8. [Q102144753] Q102144753 - (no description)\n9. [Q102144756] Q102144756 - (no description)\n10. [Q114068528] Ada Lovelace - GPU microarchitecture designed by Nvidia (Type: microarchitecture)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: search_entity_candidates]\nCANDIDATES for 'Charles Babbage' (10 found):\n\n1. [Q33215138] Charles Babbage's brain - the preserved brain of scientist Charles Babbage (Type: human brain, particular anatomical entity)\n2. [Q46633] Charles Babbage - English mathematician, philosopher, and engineer (1791\u20131871) (Type: human)\n3. [Q3276938] Charles Babbage Institute - research center at the University of Minnesota (Type: research center, academic publisher)\n4. [Q28049734] Charles Babbage - painting by Samuel Laurence (Type: painting)\n5. [Q30048539] Q30048539 - (no description)\n6. [Q42714013] Q42714013 - (no description)\n7. [Q52156071] Charles Babbage, FRS (1792-1871) - painting (Type: painting)\n8. [Q52391803] Q52391803 - (no description)\n9. [Q52391804] Q52391804 - (no description)\n10. [Q52473495] Q52473495 - (no description)\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: fetch_entity_properties]\nEntity: Ada Lovelace\nQID: Q7259\nDescription: English mathematician (1815\u20131852)\n\nP106: occupation:\n  - writer\n  - poet\n  - engineer\n  - computer scientist\n  - mathematician\nP800: notable work: (not available)\n\n[Tool: fetch_entity_properties]\nEntity: Charles Babbage\nQID: Q46633\nDescription: English mathematician, philosopher, and engineer (1791\u20131871)\n\nP106: occupation:\n  - astronomer\n  - writer\n  - engineer\n  - computer scientist\n  - mathematician\nP800: notable work:\n  - analytical engine\n  - difference engine\n  - Ninth Bridgewater Treatise\n  - Reflections on the Decline of Science in England, and on Some of Its Causes\n  - On the Economy of Machinery and Manufactures",
+      "score": 0.633869469165802,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "Ada Lovelace and Charles Babbage both made significant contributions to early computing concepts.\n\n**Charles Babbage:**\n- **Difference Engine:** Invented the Difference Engine, a mechanical device designed to tabulate polynomial functions. This was intended to eliminate errors in mathematical tables.\n- **Analytical Engine:** Designed the Analytical Engine, which is considered an early model for a computer. It featured punch cards for input and output, conditional branching, and loops, laying foundational concepts for modern computers.\n\n**Ada Lovelace:**\n- **Notes on the Analytical Engine:** While Babbage designed the Analytical Engine, Ada Lovelace wrote extensive notes on it, including what is recognized as the first algorithm intended to be processed by a machine. This work is considered the first published example of a computer program.\n- **Visionary Insights:** Lovelace envisioned the potential of computers beyond mere calculation, suggesting they could manipulate symbols in accordance with rules and possibly compose complex music or create graphics.\n\nBoth figures are foundational to the history of computing, with Babbage's mechanical designs providing the hardware concepts and Lovelace contributing early software ideas and visionary applications.",
+      "score": 0.4080490469932556,
+      "is_hallucination": true
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "RAG",
+      "rag_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response accurately reflects Ada Lovelace's work on Charles Babbage\u2019s analytical engine, including her algorithm for Bernoulli numbers. It also correctly mentions Charles Babbage's designs of the difference and analytical engines along with his notable works. However, it omits some details about Babbage's broader contributions to mathematical tables and precision engineering as mentioned in the source context.",
+        "case_label": "factual",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": true,
+        "hallucination_score": 0.06372934697088907,
+        "span_count": 2,
+        "hallucinated_spans": [
+          {
+            "text": "punch cards for input and output",
+            "reason": "This detail about punch cards is not explicitly mentioned in the provided source context."
+          },
+          {
+            "text": "possibly compose complex music or create graphics",
+            "reason": "The specific mention of composing complex music or creating graphics extends beyond what is stated in the source context."
+          }
+        ],
+        "analysis": "The response mostly aligns with the source context but includes details about punch cards and potential applications like composing music or creating graphics that are not explicitly mentioned in the provided facts.",
+        "case_label": "hallucinated",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "Prompt-Only",
+      "rag_evaluation": {
+        "has_hallucination": true,
+        "hallucination_severity": 0.52734375,
+        "hallucination_score": 0.52734375,
+        "sentence_count": 4,
+        "hallucinated_sentences": [
+          {
+            "text": "Ada Lovelace is known for her work as a mathematician and computer scientist, though specific notable works are not listed in the available data.",
+            "probability": 0.92578125,
+            "is_common_knowledge": false
+          },
+          {
+            "text": "His notable works include \"The Ninth Bridgewater Treatise,\" \"Reflections on the Decline of Science in England, and on Some of Its Causes,\" and \"On the Economy of Machinery and Manufactures.\"",
+            "probability": 0.99609375,
+            "is_common_knowledge": false
+          }
+        ],
+        "case_label": "hallucinated",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.07624308268229167,
+        "hallucination_score": 0.07624308268229167,
+        "sentence_count": 6,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      }
+    }
+  },
+  {
+    "question": "What organization did Alan Turing work for during World War II?",
+    "description": "Specific historical fact requiring precise answer",
+    "ground_truth": "During World War II, Alan Turing worked for the Government Code and Cypher School (GC&CS) at Bletchley Park, the British government's cryptanalytic center responsible for signals intelligence and codebreaking. The organization was founded in 1919, operated at Bletchley Park during the war, and later became the foundation of GCHQ. Alan Turing was a human mathematician, logician, cryptanalyst, computer scientist, and theoretical biologist born on 23 June 1912 in Maida Vale, London, and he died on 7 June 1954 in Wilmslow, Cheshire. He held British citizenship, was male, and his parents were Julius Mathison Turing and Ethel Sara Turing. He never married and had no children. Turing studied at Sherborne School, King's College Cambridge, and earned his PhD at Princeton University under Alonzo Church. He worked at King's College Cambridge, the Government Code and Cypher School at Bletchley Park, the National Physical Laboratory, and the University of Manchester. His fields included mathematical logic, computability theory, cryptanalysis, early computer architecture, and developmental biology. His major achievements included formulating the universal Turing machine, foundational contributions to computation theory, breaking key components of the Enigma cipher during World War II, and proposing the Turing Test for machine intelligence. He was elected a Fellow of the Royal Society in recognition of his scientific contributions. In 1952, Turing was convicted under British law for homosexual acts and subjected to chemical castration; two years later, in 1954, he died by suicide. In 2013, he received a posthumous royal pardon.",
+    "rag": {
+      "response": "Alan Turing worked for the Government Communications Headquarters during World War II.",
+      "retrieved_context": "[Tool: search_entity_candidates]\nCANDIDATES for 'Alan Turing' (10 found):\n\n1. [Q7251] Alan Turing - English computer scientist (1912\u20131954) (Type: human)\n2. [Q28846012] Alan Turing - fictional analogon of Alan Turing (1912-1954) (Type: fictional human, film character)\n3. [Q3736114] Alan Turing Memorial - memorial in Manchester, England (Type: sculpture, LGBT monument or memorial)\n4. [Q4707938] Alan Turing Centenary Conference - Computer Science Conference celebrating Alan Turing in his centenary year (Type: recurring event)\n5. [Q4707939] Alan Turing Building - University building at the University of Manchester (Type: building)\n6. [Q4707947] Alan Turing Year - international observance (Type: world day)\n7. [Q16826821] Alan Turing Institute - research institute in Britain (Type: research institute)\n8. [Q17601707] Alan Turing given posthumous pardon - Wikinews article (Type: Wikinews article)\n9. [Q17654894] Alan Turing Building opens at University of Manchester - Wikinews article (Type: Wikinews article)\n10. [Q18574712] Alan Turing: The Enigma - Type: version, edition or translation\n\nINSTRUCTIONS: Analyze these candidates and select the one that best matches the question context.\nUse the QID of your selected candidate with fetch_entity_properties tool.\nIf none match, state the entity cannot be verified.\n\n[Tool: fetch_entity_properties]\nEntity: Alan Turing\nQID: Q7251\nDescription: English computer scientist (1912\u20131954)\n\nP108: employer:\n  - University of Cambridge\n  - Government Communications Headquarters\n  - Victoria University of Manchester\n  - National Physical Laboratory",
+      "score": 0.9430884718894958,
+      "is_hallucination": false
+    },
+    "prompt_only": {
+      "response": "Alan Turing worked for the Government Code and Cipher School (GC&CS) during World War II. This organization was based at Bletchley Park, where Turing played a crucial role in cracking German cryptographic systems, most notably the Enigma machine.",
+      "score": 0.8879355788230896,
+      "is_hallucination": false
+    },
+    "vectara_winner": "RAG",
+    "ragtruth": {
+      "winner": "Prompt-Only",
+      "rag_evaluation": {
+        "has_hallucination": true,
+        "hallucination_score": 0.4418604651162791,
+        "span_count": 1,
+        "hallucinated_spans": [
+          {
+            "text": "Government Communications Headquarters",
+            "reason": "Alan Turing worked for the Government Code and Cypher School (GC&CS) at Bletchley Park during World War II, not directly for GCHQ."
+          }
+        ],
+        "analysis": "The response incorrectly states that Alan Turing worked for the Government Communications Headquarters during WWII. The source context specifies he worked for GC&CS at Bletchley Park, which later became part of GCHQ.",
+        "case_label": "hallucinated",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_score": 0.0,
+        "span_count": 0,
+        "hallucinated_spans": [],
+        "analysis": "The response accurately reflects the source context without any contradictions or unsupported claims.",
+        "case_label": "factual",
+        "error": null
+      }
+    },
+    "aimon": {
+      "winner": "Prompt-Only",
+      "rag_evaluation": {
+        "has_hallucination": true,
+        "hallucination_severity": 0.65625,
+        "hallucination_score": 0.65625,
+        "sentence_count": 0,
+        "hallucinated_sentences": [],
+        "case_label": "hallucinated",
+        "error": null
+      },
+      "prompt_only_evaluation": {
+        "has_hallucination": false,
+        "hallucination_severity": 0.2890625,
+        "hallucination_score": 0.2890625,
+        "sentence_count": 1,
+        "hallucinated_sentences": [],
+        "case_label": "factual",
+        "error": null
+      }
+    }
+  }
+]

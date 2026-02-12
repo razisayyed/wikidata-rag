@@ -5,9 +5,13 @@ from __future__ import annotations
 from typing import Optional
 
 import requests
-from bs4 import BeautifulSoup
 from langchain.tools import tool
 from pydantic import BaseModel, Field
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None  # type: ignore[assignment]
 
 from ..utils.logging import (
     configure_logging,
@@ -67,9 +71,6 @@ def fetch_wikipedia_article_tool(qid: str, entity_name: str) -> str:
         article_text,
         "",
         "=== END OF ARTICLE ===",
-        "",
-        "INSTRUCTIONS: Extract facts relevant to the question from this article.",
-        "Only use information explicitly stated in the article above.",
     ]
 
     return "\n".join(output)
@@ -122,6 +123,24 @@ def html_to_plain_text(html: str) -> str:
 
     if not html:
         return ""
+
+    if BeautifulSoup is None:
+        # Lightweight fallback for environments where bs4 is unavailable.
+        text = html
+        text = text.replace("<br>", "\n").replace("<br/>", "\n").replace("<br />", "\n")
+        text = text.replace("</p>", "\n").replace("</li>", "\n")
+        text = (
+            text.replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+        )
+        # Best-effort tag stripping.
+        import re
+
+        text = re.sub(r"<[^>]+>", "", text)
+        lines = (line.strip() for line in text.splitlines())
+        return "\n".join(line for line in lines if line)
 
     soup = BeautifulSoup(html, "html.parser")
 

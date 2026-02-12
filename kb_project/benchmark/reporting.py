@@ -12,11 +12,19 @@ from typing import List
 
 from .models import ComparisonResult, Colors
 from .llm_judge import format_judge_result_detailed
+from ..settings import OPENAI_JUDGE_MODEL
 
 
 # ==========================================================================
 # Table Generation
 # ==========================================================================
+
+
+def _escape_markdown_cell(text: str) -> str:
+    """Escape markdown table cell content and preserve line breaks."""
+    if text is None:
+        return ""
+    return text.replace("|", "\\|").replace("\n", "<br>")
 
 
 def generate_comparison_table(
@@ -33,6 +41,8 @@ def generate_comparison_table(
     lines.append(f"{Colors.BOLD}{'=' * 80}{Colors.RESET}")
     lines.append(f"{Colors.BOLD}BENCHMARK RESULTS SUMMARY{Colors.RESET}")
     lines.append(f"{Colors.BOLD}{'=' * 80}{Colors.RESET}")
+    if results:
+        lines.append(f"Primary evaluation mode: {results[0].evaluation_mode}")
 
     for i, r in enumerate(results, 1):
         lines.append("")
@@ -45,6 +55,11 @@ def generate_comparison_table(
         lines.append(
             f"  Vectara:  RAG={r.rag_score:.3f}{rag_v}  Prompt={r.prompt_only_score:.3f}{prompt_v}  → {r.winner}"
         )
+        if r.rag_faithfulness_score is not None:
+            rag_f = fail if r.rag_faithfulness_is_hallucination else ok
+            lines.append(
+                f"  Faithful: RAG={r.rag_faithfulness_score:.3f}{rag_f}  (retrieved-evidence grounding)"
+            )
 
         # RAGTruth
         if r.rag_ragtruth_result is not None:
@@ -93,6 +108,20 @@ def generate_markdown_table(results: List[ComparisonResult]) -> str:
         rag_result = "❌" if r.rag_is_hallucination else "✅"
         prompt_result = "❌" if r.prompt_only_is_hallucination else "✅"
         output += f"| {i} | {q_short} | {r.rag_score:.3f} | {rag_result} | {r.prompt_only_score:.3f} | {prompt_result} | {r.winner} |\n"
+
+    faithfulness_results = [r for r in results if r.rag_faithfulness_score is not None]
+    if faithfulness_results:
+        output += "\n### RAG Retrieval-Faithfulness (Vectara)\n\n"
+        output += "| # | Question | RAG Faithfulness Score | RAG |\n"
+        output += "|---|----------|------------------------|-----|\n"
+        for i, r in enumerate(results, 1):
+            if r.rag_faithfulness_score is None:
+                continue
+            q_short = r.question[:40] + "..." if len(r.question) > 40 else r.question
+            rag_result = "❌" if r.rag_faithfulness_is_hallucination else "✅"
+            output += (
+                f"| {i} | {q_short} | {r.rag_faithfulness_score:.3f} | {rag_result} |\n"
+            )
 
     # ==========================================================================
     # RAGTruth Table (if available)
@@ -156,6 +185,7 @@ def generate_markdown_table(results: List[ComparisonResult]) -> str:
 def generate_summary_stats(results: List[ComparisonResult]) -> str:
     """Generate summary statistics including all evaluation methods."""
     total = len(results)
+    evaluation_mode = results[0].evaluation_mode if results else "ground_truth"
 
     # RAG stats (Vectara)
     rag_hallucinations = sum(1 for r in results if r.rag_is_hallucination)
@@ -175,6 +205,8 @@ def generate_summary_stats(results: List[ComparisonResult]) -> str:
     ties = sum(1 for r in results if r.winner == "Tie")
 
     output = f"""
+**Primary Evaluation Mode:** `{evaluation_mode}`
+
 ## Summary Statistics (Vectara Model)
 
 | Metric | RAG (Wikidata) | Prompt-Only |
@@ -192,6 +224,26 @@ def generate_summary_stats(results: List[ComparisonResult]) -> str:
 | RAG (Wikidata) | {rag_wins} |
 | Prompt-Only | {prompt_wins} |
 | Tie | {ties} |
+"""
+
+    faithfulness_results = [r for r in results if r.rag_faithfulness_score is not None]
+    if faithfulness_results:
+        rag_faith_hallucinations = sum(
+            1 for r in faithfulness_results if r.rag_faithfulness_is_hallucination
+        )
+        rag_faith_avg_score = (
+            sum(r.rag_faithfulness_score for r in faithfulness_results if r.rag_faithfulness_score is not None)
+            / len(faithfulness_results)
+        )
+        output += f"""
+## RAG Retrieval-Faithfulness (Secondary)
+
+| Metric | RAG |
+|--------|-----|
+| Cases with retrieval evidence | {len(faithfulness_results)} |
+| Non-faithful responses | {rag_faith_hallucinations} |
+| Non-faithful rate | {rag_faith_hallucinations/len(faithfulness_results)*100:.1f}% |
+| Average faithfulness score | {rag_faith_avg_score:.3f} |
 """
 
     # Add LLM Judge stats if available
@@ -224,7 +276,7 @@ def generate_summary_stats(results: List[ComparisonResult]) -> str:
         )
 
         output += f"""
-## LLM Judge Statistics (GPT-4o)
+## LLM Judge Statistics ({OPENAI_JUDGE_MODEL})
 
 | Metric | RAG (Wikidata) | Prompt-Only |
 |--------|----------------|-------------|
@@ -381,10 +433,12 @@ def generate_summary_stats(results: List[ComparisonResult]) -> str:
 def generate_full_report(results: List[ComparisonResult]) -> str:
     """Generate a complete markdown report."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    evaluation_mode = results[0].evaluation_mode if results else "ground_truth"
 
     report = f"""# Hallucination Comparison Report
 
 **Generated:** {timestamp}
+**Primary Evaluation Mode:** `{evaluation_mode}`
 
 ## Overview
 
@@ -414,20 +468,25 @@ This report compares two approaches to reducing LLM hallucinations:
 
 **Question:** {r.question}
 
-**Ground Truth:**
-```
-{r.ground_truth}
-```
+| Ground Truth | RAG Output | Prompt-Only Output |
+|---|---|---|
+| {_escape_markdown_cell(r.ground_truth)} | {_escape_markdown_cell(r.rag_response)} | {_escape_markdown_cell(r.prompt_only_response)} |
 
 #### RAG Model ({rag_status}, Score: {r.rag_score:.3f})
 
-**Response:**
-{r.rag_response}
-
 #### Prompt-Only Model ({prompt_status}, Score: {r.prompt_only_score:.3f})
 
-**Response:**
-{r.prompt_only_response}
+"""
+        if r.rag_faithfulness_score is not None:
+            rag_faith_status = (
+                "❌ NON-FAITHFUL"
+                if r.rag_faithfulness_is_hallucination
+                else "✅ FAITHFUL"
+            )
+            report += f"""#### RAG Retrieval-Faithfulness (Secondary, Retrieved Evidence Only)
+
+**Status:** {rag_faith_status}  
+**Score:** {r.rag_faithfulness_score:.3f}
 
 """
         # Add LLM Judge evaluation if available
@@ -546,11 +605,14 @@ def save_benchmark_report(
             "question": r.question,
             "description": r.description,
             "ground_truth": r.ground_truth,
+            "evaluation_mode": r.evaluation_mode,
             "rag": {
                 "response": r.rag_response,
                 "retrieved_context": r.rag_retrieved_context,
                 "score": r.rag_score,
                 "is_hallucination": r.rag_is_hallucination,
+                "faithfulness_score": r.rag_faithfulness_score,
+                "faithfulness_is_hallucination": r.rag_faithfulness_is_hallucination,
             },
             "prompt_only": {
                 "response": r.prompt_only_response,

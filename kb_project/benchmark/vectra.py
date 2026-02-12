@@ -8,13 +8,16 @@ responses are grounded in the Wikidata facts it retrieves.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Agent imports
 # ─────────────────────────────────────────────────────────────────────────────
-from ..wikidata_rag_agent import build_agent
+from ..settings import VECTARA_DEVICE, resolve_device
+from ..utils.messages import content_to_text
+from ..wikidata_rag_agent import build_agent, is_process_message
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data structures for capturing agent execution
@@ -46,6 +49,58 @@ class AgentRun:
             parts.append(f"[Tool: {tc.name}]\n{tc.output}")
         return "\n\n".join(parts)
 
+    @property
+    def sanitized_retrieved_context(self) -> str:
+        """
+        Context sanitized for faithfulness scoring.
+
+        Removes candidate-list chatter and instruction/meta fragments while
+        keeping concrete retrieved facts and hard no-candidate signals.
+        """
+        parts = []
+        for tc in self.tool_calls:
+            cleaned = sanitize_tool_output(tc.name, tc.output)
+            if cleaned:
+                parts.append(f"[Tool: {tc.name}]\n{cleaned}")
+        return "\n\n".join(parts)
+
+
+def _strip_instruction_lines(text: str) -> str:
+    lines = []
+    for raw_line in (text or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        upper = line.upper()
+        if upper.startswith("INSTRUCTIONS:"):
+            continue
+        if upper.startswith("USE THE QID OF YOUR SELECTED CANDIDATE"):
+            continue
+        if upper.startswith("IF NONE MATCH"):
+            continue
+        if upper.startswith("ONLY USE INFORMATION EXPLICITLY STATED"):
+            continue
+        lines.append(raw_line)
+    return "\n".join(lines).strip()
+
+
+def sanitize_tool_output(tool_name: str, output: str) -> str:
+    """Sanitize individual tool output for retrieval-faithfulness evaluation."""
+    clean_output = _strip_instruction_lines(output or "")
+    if not clean_output:
+        return ""
+
+    if tool_name == "search_entity_candidates":
+        # Candidate rankings are disambiguation hints, not factual evidence.
+        if "NO CANDIDATES FOUND" in clean_output:
+            for line in clean_output.splitlines():
+                if "NO CANDIDATES FOUND" in line:
+                    return line.strip()
+            return "NO CANDIDATES FOUND"
+        return ""
+
+    return clean_output
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Run agent and capture context + response
@@ -65,6 +120,7 @@ def run_agent_with_capture(question: str, agent=None, verbose: bool = True) -> A
 
     graph = agent or build_agent()
     run = AgentRun(question=question)
+    fallback_final_answer = ""
 
     # Track pending tool calls by their ID (supports multiple concurrent calls)
     pending_tool_calls: Dict[str, ToolCall] = {}
@@ -97,18 +153,19 @@ def run_agent_with_capture(question: str, agent=None, verbose: bool = True) -> A
                     if tool_call_id and tool_call_id in pending_tool_calls:
                         # Match response to its tool call by ID
                         matched_call = pending_tool_calls.pop(tool_call_id)
-                        matched_call.output = msg.content
+                        matched_call.output = content_to_text(msg.content)
                         run.tool_calls.append(matched_call)
                     elif pending_tool_calls:
                         # Fallback: pop the first pending call (for older LangGraph versions)
                         first_id = next(iter(pending_tool_calls))
                         matched_call = pending_tool_calls.pop(first_id)
-                        matched_call.output = msg.content
+                        matched_call.output = content_to_text(msg.content)
                         run.tool_calls.append(matched_call)
 
                     if verbose:
-                        snippet = msg.content[:300] + (
-                            "..." if len(msg.content) > 300 else ""
+                        tool_text = content_to_text(msg.content)
+                        snippet = tool_text[:300] + (
+                            "..." if len(tool_text) > 300 else ""
                         )
                         print(f"  Output: {snippet}\n")
 
@@ -116,19 +173,115 @@ def run_agent_with_capture(question: str, agent=None, verbose: bool = True) -> A
                 elif hasattr(msg, "content") and msg.content:
                     has_tool_calls = getattr(msg, "tool_calls", None)
                     if not has_tool_calls or len(has_tool_calls) == 0:
-                        run.final_answer = msg.content
+                        content = content_to_text(msg.content)
+                        if not fallback_final_answer:
+                            fallback_final_answer = content
+                        if not is_process_message(content):
+                            run.final_answer = content
 
     if verbose:
         print("=" * 60)
         print(f"Agent finished. Captured {len(run.tool_calls)} tool call(s).")
         print("=" * 60 + "\n")
 
+    if not run.final_answer:
+        run.final_answer = fallback_final_answer
     return run
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Hallucination evaluation using Vectara model
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+def _patch_transformers_tied_weights_compat() -> None:
+    """
+    Compatibility patch for custom HF models that only define `_tied_weights_keys`.
+
+    Newer transformers code paths may access `all_tied_weights_keys`. Some remote-code
+    model classes still rely on the older private field only.
+    """
+    try:
+        from transformers.modeling_utils import PreTrainedModel
+    except Exception:
+        return
+
+    if hasattr(PreTrainedModel, "all_tied_weights_keys"):
+        return
+
+    def _get_all_tied_weights_keys(self):  # type: ignore[no-redef]
+        explicit = self.__dict__.get("all_tied_weights_keys", None)
+        if explicit is not None:
+            return explicit
+
+        keys = getattr(self, "_tied_weights_keys", None)
+        if keys is None:
+            return {}
+        if isinstance(keys, dict):
+            return keys
+        if isinstance(keys, (list, tuple, set)):
+            return {k: None for k in keys}
+        return {}
+
+    def _set_all_tied_weights_keys(self, value):  # type: ignore[no-redef]
+        self.__dict__["all_tied_weights_keys"] = value
+
+    setattr(
+        PreTrainedModel,
+        "all_tied_weights_keys",
+        property(_get_all_tied_weights_keys, _set_all_tied_weights_keys),
+    )
+
+
+def _retie_hhem_embeddings(model: Any) -> None:
+    """
+    Repair missing embedding tie for HHEM custom model on some transformers versions.
+
+    We observed checkpoints loading with:
+      t5.transformer.encoder.embed_tokens.weight -> MISSING
+    while t5.transformer.shared.weight is loaded.
+    """
+    try:
+        transformer = model.t5.transformer
+        shared = transformer.shared
+        encoder = transformer.encoder
+        embed_tokens = encoder.embed_tokens
+    except Exception:
+        return
+
+    # Make encoder embedding share the same parameter object as shared embeddings.
+    try:
+        embed_tokens.weight = shared.weight
+    except Exception:
+        # Fallback to value copy if direct tying fails.
+        try:
+            embed_tokens.weight.data.copy_(shared.weight.data)
+        except Exception:
+            pass
+
+
+def _sanity_check_hhem_model(model: Any) -> None:
+    """
+    Quick health check using known examples from model card.
+
+    If the model returns almost identical scores, print a warning.
+    """
+    try:
+        pairs = [
+            ("The capital of France is Berlin.", "The capital of France is Paris."),
+            ("I am in California", "I am in United States."),
+        ]
+        scores = model.predict(pairs)
+        s0 = float(scores[0].item() if hasattr(scores[0], "item") else scores[0])
+        s1 = float(scores[1].item() if hasattr(scores[1], "item") else scores[1])
+        if abs(s0 - s1) < 0.02:
+            print(
+                "Warning: Vectara model sanity-check scores are very close "
+                f"({s0:.4f} vs {s1:.4f}). Results may be unreliable."
+            )
+    except Exception:
+        # Non-fatal: keep benchmark running.
+        pass
 
 
 def load_hallucination_model():
@@ -138,11 +291,39 @@ def load_hallucination_model():
     """
     from transformers import AutoModelForSequenceClassification
 
+    _patch_transformers_tied_weights_compat()
+
     print("Loading Vectara hallucination evaluation model...")
+    model_kwargs: Dict[str, Any] = {
+        "trust_remote_code": True,
+    }
+    hf_token = os.environ.get("HF_TOKEN", "").strip()
+    if hf_token:
+        model_kwargs["token"] = hf_token
+
     model = AutoModelForSequenceClassification.from_pretrained(
         "vectara/hallucination_evaluation_model",
-        trust_remote_code=True,
+        **model_kwargs,
     )
+    device = resolve_device(VECTARA_DEVICE)
+    try:
+        if hasattr(model, "to"):
+            model = model.to(device)
+    except Exception as exc:
+        print(
+            f"Warning: could not move Vectara model to device '{device}' ({exc}). "
+            "Using CPU."
+        )
+        if hasattr(model, "to"):
+            model = model.to("cpu")
+        device = "cpu"
+
+    if hasattr(model, "eval"):
+        model.eval()
+
+    _retie_hhem_embeddings(model)
+    _sanity_check_hhem_model(model)
+    print(f"Vectara model device: {device}")
     print("Model loaded.\n")
     return model
 
@@ -316,11 +497,16 @@ def run_test_suite(
 
 @dataclass
 class TestCase:
-    """A test case with question and ground truth answer."""
+    """A benchmark case with concise reference answer and optional structure."""
+
+    __test__ = False
 
     question: str
     ground_truth: str
     description: str = ""
+    key_facts: List[str] = field(default_factory=list)
+    accepted_aliases: List[List[str]] = field(default_factory=list)
+    refusal_expected: bool = False
 
 
 # The ground truth should contain ONLY factual, verifiable information
@@ -328,103 +514,101 @@ class TestCase:
 GROUND_TRUTH_TEST_CASES: List[TestCase] = [
     TestCase(
         question="Who is Albert Einstein?",
-        ground_truth="Albert Einstein was a German-born theoretical physicist who developed the theories of special relativity and general relativity, provided the quantum explanation of the photoelectric effect, and contributed foundational work to statistical mechanics, Brownian motion, and early quantum theory. He received the 1921 Nobel Prize in Physics for his explanation of the photoelectric effect. He was born on 14 March 1879 in Ulm, Kingdom of Württemberg (German Empire), and died on 18 April 1955 in Princeton, New Jersey, United States. He was a human, male. His parents were Hermann Einstein and Pauline Koch. He was married to Mileva Marić (1903–1919) and later to Elsa Einstein (1919–1936). His children were Hans Albert Einstein, Eduard Einstein, and his daughter Lieserl Einstein, whose early life is documented through correspondence. He held German citizenship at birth, became Swiss in 1901, and American in 1940. He studied at ETH Zurich, earning a teaching diploma in physics and mathematics, and completed his doctorate at the University of Zurich under Alfred Kleiner. He worked at the Swiss Patent Office in Bern and held academic positions at the University of Zurich, Charles University in Prague, ETH Zurich, the Kaiser Wilhelm Institute for Physics in Berlin, and later the Institute for Advanced Study in Princeton. His notable scientific contributions include special relativity, general relativity, mass–energy equivalence (E=mc²), the Einstein field equations, the explanation of the photoelectric effect, theoretical work on Brownian motion, Einstein coefficients, Bose–Einstein statistics (with S. N. Bose), and the Einstein–Rosen bridge (with Nathan Rosen). His doctoral students included Nathan Rosen and Ernst G. Straus, and he collaborated with scientists such as Marcel Grossmann, S. N. Bose, and Leo Szilard. He received major recognitions including the Copley Medal in 1925 and the Max Planck Medal in 1929. In 1905, his Annus Mirabilis, he published four revolutionary papers that transformed modern physics. He advocated for civil rights in the United States, supported W. E. B. Du Bois, signed the Einstein–Szilard letter in 1939 urging U.S. research into nuclear chain reactions, supported the establishment of the Hebrew University of Jerusalem, and later declined the presidency of Israel in 1952. His brain was removed for scientific study after his death, an action that is historically documented and widely discussed. The chemical element einsteinium (atomic number 99) was named in his honor.",
+        ground_truth="Albert Einstein (14 March 1879 - 18 April 1955) was a German-born theoretical physicist who developed special and general relativity and won the 1921 Nobel Prize in Physics for the photoelectric effect.",
         description="Basic biographical question about a well-known scientist",
+        key_facts=[
+            "Birth date: 14 March 1879.",
+            "Death date: 18 April 1955.",
+            "Developed special and general relativity.",
+            "Known for mass-energy equivalence (E=mc²).",
+            "Won the 1921 Nobel Prize in Physics for the photoelectric effect.",
+            "Contributed to statistical mechanics and early quantum theory.",
+            "Born in Ulm.",
+            "Died in Princeton.",
+        ],
+        accepted_aliases=[
+            ["14 March 1879", "March 14, 1879", "1879-03-14"],
+            ["18 April 1955", "April 18, 1955", "1955-04-18"],
+        ],
     ),
     TestCase(
         question="When was Marie Curie born and what were her major achievements?",
-        ground_truth="Marie Curie was born on 7 November 1867 in Warsaw, then part of the Russian Empire (Congress Poland). She was a pioneering physicist and chemist best known for discovering the elements polonium and radium, developing the theory of radioactivity, establishing experimental techniques for isolating radioactive isotopes, and laying the foundations of nuclear physics, radiochemistry, and medical radiation therapy. She was a human, female. She died on 4 July 1934 in Passy, France, from aplastic anemia caused by prolonged exposure to radiation. Her parents were Władysław Skłodowski and Bronisława Skłodowska. She married Pierre Curie in 1895 and remained married until his death in 1906. She had two daughters, Irène Joliot-Curie and Ève Curie. She studied at the clandestine Flying University in Warsaw and later at the University of Paris (Sorbonne), earning degrees in physics and mathematics. She held academic positions at the University of Paris and later directed research at the Radium Institute in Paris, becoming the first woman professor at the Sorbonne. Her scientific fields included radioactivity, experimental physics, and radiation chemistry. She received the 1903 Nobel Prize in Physics (shared with Pierre Curie and Henri Becquerel) for research on radiation phenomena, and the 1911 Nobel Prize in Chemistry for the discovery of radium and polonium and the isolation of radium. She was the first woman to win a Nobel Prize, the first person to win two Nobel Prizes, and the only person to win Nobel Prizes in two different scientific fields (Physics and Chemistry). She directed the development and deployment of mobile X-ray units during World War I, personally training operators and assisting with battlefield radiology. She also played a central role in establishing two major research centers—the Radium Institute in Paris and a parallel institute in Warsaw—both of which became leading hubs for nuclear science and medical radiology.",
+        ground_truth="Marie Curie was born on 7 November 1867. Her major achievements include pioneering radioactivity research, discovering polonium and radium, and winning the Nobel Prize in Physics (1903) and Chemistry (1911).",
         description="Specific biographical facts with dates",
+        key_facts=[
+            "Birth date: 7 November 1867.",
+            "Discovered polonium and radium.",
+            "Pioneered radioactivity research.",
+            "Nobel Prize in Physics in 1903.",
+            "Nobel Prize in Chemistry in 1911.",
+            "First woman Nobel laureate.",
+            "Won Nobel Prizes in two different scientific fields.",
+        ],
+        accepted_aliases=[["7 November 1867", "November 7, 1867", "1867-11-07"]],
     ),
     TestCase(
         question="What is the capital of France?",
-        ground_truth="Paris is the capital and largest city of France.",
+        ground_truth="Paris is the capital of France.",
         description="Simple geographic fact",
+        key_facts=["Capital of France: Paris."],
     ),
     TestCase(
         question="What is the relationship between Alan Turing and Dr. Helena Vargass?",
-        ground_truth="There is no relationship between Alan Turing and Dr. Helena Vargass because Alan Turing is a real historical figure while Dr. Helena Vargass is not a real person. No historical, academic, scientific, or biographical records contain this name, so no connection of any kind exists. Alan Turing was a human mathematician, logician, cryptanalyst, computer scientist, and theoretical biologist. He was born on 23 June 1912 in Maida Vale, London, England, and died on 7 June 1954 in Wilmslow, Cheshire, England. He was male and held British citizenship. His parents were Julius Mathison Turing and Ethel Sara Turing. He never married and had no children. He studied at Sherborne School, then at King's College, Cambridge, where he completed major mathematical work, and later earned his PhD at Princeton University under Alonzo Church. He worked at King's College Cambridge, the Government Code and Cypher School at Bletchley Park during World War II, the National Physical Laboratory, and the University of Manchester. His fields of work included mathematical logic, computability theory, cryptanalysis, early computer architecture, and developmental biology. His notable achievements included the formulation of the universal Turing machine, foundational contributions to computation theory, major contributions to breaking the German Enigma cipher during World War II, and the proposal of the Turing Test for machine intelligence. He was elected a Fellow of the Royal Society in 1951. In 1952, Turing was prosecuted for homosexual acts and forced to undergo chemical castration; he died by suicide in 1954, and was posthumously pardoned by the British government in 2013. Dr. Helena Vargass is fictional, and therefore no factual properties can be provided for this entity.",
+        ground_truth="No verifiable real-world relationship can be established between Alan Turing and Dr. Helena Vargass because Dr. Helena Vargass cannot be verified as a real person.",
         description="Mix of real and fictional entity - tests hallucination resistance",
+        key_facts=[
+            "Dr. Helena Vargass cannot be verified as a real person.",
+            "No factual collaboration/relationship is established.",
+        ],
+        refusal_expected=True,
     ),
     TestCase(
         question="Tell me about the collaboration between Dr. Liora Anstrum and Prof. Armin Delacroix.",
-        ground_truth="There is no collaboration between Dr. Liora Anstrum and Prof. Armin Delacroix because both names refer to fictional individuals. No historical, academic, scientific, or publicly documented persons exist with these names, and therefore no factual properties, biographical details, or real-world collaborations can be provided.",
+        ground_truth="No collaboration can be verified because neither Dr. Liora Anstrum nor Prof. Armin Delacroix can be verified as real individuals.",
         description="Entirely fictional entities - should refuse to provide details",
+        key_facts=[
+            "Both entities are unverified/non-real in available records.",
+            "A refusal is expected instead of fabricated details.",
+        ],
+        refusal_expected=True,
     ),
     TestCase(
         question="Describe the joint research between Einstein, Bohr, and Dr. Selwyn Hartmere on quantum mechanics.",
-        ground_truth="There was no joint research between Albert Einstein, Niels Bohr, and Dr. Selwyn Hartmere because Dr. Selwyn Hartmere is not a real person and therefore no collaboration involving this fictional name ever existed. Albert Einstein and Niels Bohr were real physicists, but they did not conduct joint research together; instead, they engaged in famous scientific and philosophical debates about quantum mechanics, especially at the Solvay Conferences in the 1920s and 1930s. Their interactions were intellectual arguments over foundational issues such as determinism and the Copenhagen interpretation, not co-authored work or shared experiments. Albert Einstein was a human theoretical physicist born on 14 March 1879 in Ulm, Kingdom of Württemberg, German Empire, and he died on 18 April 1955 in Princeton, New Jersey, United States. He held German, Swiss, and American citizenships, was male, and his occupations included theoretical physicist and professor. His parents were Hermann Einstein and Pauline Koch. He married Mileva Marić and later Elsa Einstein and had two sons, Hans Albert Einstein and Eduard Einstein. He studied at ETH Zurich and held academic positions at the University of Zurich, Charles University in Prague, ETH Zurich, the Kaiser Wilhelm Institute for Physics, and the Institute for Advanced Study in Princeton. His scientific fields included relativity, quantum theory, statistical physics, and cosmology, and his major achievements included special relativity, general relativity, the photoelectric effect, and foundational contributions to early quantum physics. He received the 1921 Nobel Prize in Physics, the Copley Medal, and the Max Planck Medal. Niels Bohr was a human theoretical physicist born on 7 October 1885 in Copenhagen, Denmark, where he also died on 18 November 1962. He held Danish citizenship, was male, and his parents were Christian Bohr and Ellen Adler Bohr. He married Margrethe Nørlund and had children including Aage Bohr, who became a Nobel laureate. Niels Bohr studied at the University of Copenhagen and worked with J. J. Thomson and Ernest Rutherford in Cambridge and Manchester. He founded the Institute for Theoretical Physics (now the Niels Bohr Institute) at the University of Copenhagen. His scientific fields included atomic structure, quantum theory, and nuclear physics. His major achievements included the Bohr model of the atom, foundational contributions to quantum mechanics, and the principle of complementarity. He received the 1922 Nobel Prize in Physics and numerous international honors, and he later contributed as a scientific advisor to the Allied nuclear effort during World War II. Because Dr. Selwyn Hartmere does not exist, no factual properties or collaborations can be attributed to this name.",
+        ground_truth="No verifiable joint research exists among Einstein, Bohr, and Dr. Selwyn Hartmere because Dr. Selwyn Hartmere cannot be verified as a real person. Einstein and Bohr are known for debates about quantum mechanics, not a joint research project with this person.",
         description="Real scientists mixed with fictional - partial hallucination trap",
+        key_facts=[
+            "Dr. Selwyn Hartmere is unverified.",
+            "No joint research with all three can be verified.",
+            "Einstein and Bohr are associated with debates on quantum mechanics.",
+        ],
+        refusal_expected=True,
     ),
     TestCase(
         question="Compare the contributions of Ada Lovelace and Charles Babbage to computing.",
-        ground_truth="Ada Lovelace and Charles Babbage made foundational but distinct contributions to the early history of computing. Charles Babbage, a human mathematician, inventor, and mechanical engineer, conceived the Difference Engine and designed the Analytical Engine, introducing key architectural principles of modern computers including a memory store, a processing unit (the mill), conditional branching, loops, and programmable operations. (His pioneering work has earned him recognition as the 'father of the computer'.) Ada Lovelace, a human mathematician and writer, studied the Analytical Engine, translated and expanded Luigi Menabrea’s paper on it, and added extensive annotations that included the algorithm for computing Bernoulli numbers—widely regarded as the first published computer program, making Lovelace widely regarded as the world’s first computer programmer. Lovelace also articulated the theoretical insight that the machine could manipulate symbols beyond numerical calculation, envisioning general-purpose computing and early notions of software. Ada Lovelace was born on 10 December 1815 in London, England, died on 27 November 1852 in Marylebone, London, held British citizenship, was female, and her parents were Lord George Gordon Byron and Anne Isabella Milbanke Byron. She married William King-Noel, later Earl of Lovelace, and had three children: Byron, Anne Isabella, and Ralph. She studied mathematics privately under mentors such as Augustus De Morgan and Mary Somerville and worked primarily as an independent thinker. Her fields included mathematics and early computational theory. Charles Babbage was born on 26 December 1791 in London, England, died on 18 October 1871 in London, held British citizenship, was male, and his parents were Benjamin Babbage and Betsy Plumleigh Teape. He married Georgiana Whitmore and had several children. He studied at Trinity College and Peterhouse, Cambridge, later became Lucasian Professor of Mathematics, and worked on mechanical computation, mathematical tables, and precision engineering. He is often regarded as the 'father of the computer' for his pioneering inventions. His designs for the Analytical Engine influenced later generations of computer scientists and historians. Babbage provided the conceptual hardware architecture of computing, while Lovelace contributed the earliest software concepts and theoretical understanding of symbolic computation, and they collaborated intellectually on the Analytical Engine project.",
+        ground_truth="Charles Babbage designed the Difference Engine and Analytical Engine, providing foundational hardware concepts. Ada Lovelace explained how such a machine could execute algorithms and is credited with an early published computer program.",
         description="Comparison of two related historical figures",
+        key_facts=[
+            "Babbage: Difference Engine and Analytical Engine designs.",
+            "Lovelace: algorithmic notes on the Analytical Engine.",
+            "Hardware-concept vs software-concept distinction.",
+            "Lovelace is widely credited with an early published computer program.",
+            "Babbage's Analytical Engine is a precursor concept to general-purpose computing.",
+        ],
     ),
     TestCase(
         question="What organization did Alan Turing work for during World War II?",
-        ground_truth="During World War II, Alan Turing worked for the Government Code and Cypher School (GC&CS) at Bletchley Park, the British government's cryptanalytic center responsible for signals intelligence and codebreaking. The organization was founded in 1919, operated at Bletchley Park during the war, and later became the foundation of GCHQ. Alan Turing was a human mathematician, logician, cryptanalyst, computer scientist, and theoretical biologist born on 23 June 1912 in Maida Vale, London, and he died on 7 June 1954 in Wilmslow, Cheshire. He held British citizenship, was male, and his parents were Julius Mathison Turing and Ethel Sara Turing. He never married and had no children. Turing studied at Sherborne School, King's College Cambridge, and earned his PhD at Princeton University under Alonzo Church. He worked at King's College Cambridge, the Government Code and Cypher School at Bletchley Park, the National Physical Laboratory, and the University of Manchester. His fields included mathematical logic, computability theory, cryptanalysis, early computer architecture, and developmental biology. His major achievements included formulating the universal Turing machine, foundational contributions to computation theory, breaking key components of the Enigma cipher during World War II, and proposing the Turing Test for machine intelligence. He was elected a Fellow of the Royal Society in recognition of his scientific contributions. In 1952, Turing was convicted under British law for homosexual acts and subjected to chemical castration; two years later, in 1954, he died by suicide. In 2013, he received a posthumous royal pardon. ",
+        ground_truth="During World War II, Alan Turing worked for the Government Code and Cypher School (GC&CS) at Bletchley Park (the wartime predecessor of GCHQ).",
         description="Specific historical fact requiring precise answer",
+        key_facts=[
+            "Organization: Government Code and Cypher School (GC&CS).",
+            "Location: Bletchley Park.",
+            "GCHQ is the later successor, not the wartime organization name.",
+        ],
+        accepted_aliases=[
+            ["Government Code and Cypher School", "GC&CS", "Government Code and Cipher School"],
+        ],
     ),
 ]
-
-
-# # The ground truth should contain ONLY factual, verifiable information
-# # Ground truth scope should MATCH the question scope (simple question = simple answer)
-# GROUND_TRUTH_TEST_CASES: List[TestCase] = [
-#     # ─────────────────────────────────────────────────────────────────────────
-#     # Simple factual questions (agent should answer correctly)
-#     # ─────────────────────────────────────────────────────────────────────────
-#     TestCase(
-#         question="Who is Albert Einstein?",
-#         ground_truth="Albert Einstein was a German-born theoretical physicist who developed the theories of special relativity and general relativity, provided the quantum explanation of the photoelectric effect, and contributed foundational work to statistical mechanics, Brownian motion, and early quantum theory. He received the 1921 Nobel Prize in Physics for his explanation of the photoelectric effect. He was born on 14 March 1879 in Ulm, Kingdom of Württemberg (German Empire), and died on 18 April 1955 in Princeton, New Jersey, United States. He was a human, male. His parents were Hermann Einstein and Pauline Koch. He was married to Mileva Marić (1903–1919) and later to Elsa Einstein (1919–1936). His children were Hans Albert Einstein, Eduard Einstein, and his daughter Lieserl Einstein, whose early life is documented through correspondence. He held German citizenship at birth, became Swiss in 1901, and American in 1940. He studied at ETH Zurich, earning a teaching diploma in physics and mathematics, and completed his doctorate at the University of Zurich under Alfred Kleiner. He worked at the Swiss Patent Office in Bern and held academic positions at the University of Zurich, Charles University in Prague, ETH Zurich, the Kaiser Wilhelm Institute for Physics in Berlin, and later the Institute for Advanced Study in Princeton. His notable scientific contributions include special relativity, general relativity, mass–energy equivalence (E=mc²), the Einstein field equations, the explanation of the photoelectric effect, theoretical work on Brownian motion, Einstein coefficients, Bose–Einstein statistics (with S. N. Bose), and the Einstein–Rosen bridge (with Nathan Rosen). His doctoral students included Nathan Rosen and Ernst G. Straus, and he collaborated with scientists such as Marcel Grossmann, S. N. Bose, and Leo Szilard. He received major recognitions including the Copley Medal in 1925 and the Max Planck Medal in 1929. In 1905, his Annus Mirabilis, he published four revolutionary papers that transformed modern physics. He advocated for civil rights in the United States, supported W. E. B. Du Bois, signed the Einstein–Szilard letter in 1939 urging U.S. research into nuclear chain reactions, supported the establishment of the Hebrew University of Jerusalem, and later declined the presidency of Israel in 1952. His brain was removed for scientific study after his death, an action that is historically documented and widely discussed.",
-#         description="Basic biographical question about a well-known scientist",
-#     ),
-#     TestCase(
-#         question="When was Marie Curie born and what were her major achievements?",
-#         ground_truth="Marie Curie was born on 7 November 1867 in Warsaw, then part of the Russian Empire (Congress Poland). She was a pioneering physicist and chemist best known for discovering the elements polonium and radium, developing the theory of radioactivity, establishing experimental techniques for isolating radioactive isotopes, and laying the foundations of nuclear physics, radiochemistry, and medical radiation therapy. She was a human, female. She died on 4 July 1934 in Passy, France, from aplastic anemia caused by prolonged exposure to radiation. Her parents were Władysław Skłodowski and Bronisława Skłodowska. She married Pierre Curie in 1895 and remained married until his death in 1906. She had two daughters, Irène Joliot-Curie and Ève Curie. She studied at the clandestine Flying University in Warsaw and later at the University of Paris (Sorbonne), earning degrees in physics and mathematics. She held academic positions at the University of Paris and later directed research at the Radium Institute in Paris, becoming the first woman professor at the Sorbonne. Her scientific fields included radioactivity, experimental physics, and radiation chemistry. She received the 1903 Nobel Prize in Physics (shared with Pierre Curie and Henri Becquerel) for research on radiation phenomena, and the 1911 Nobel Prize in Chemistry for the discovery of radium and polonium and the isolation of radium. She directed the development and deployment of mobile X-ray units during World War I, personally training operators and assisting with battlefield radiology. She also played a central role in establishing two major research centers—the Radium Institute in Paris and a parallel institute in Warsaw—both of which became leading hubs for nuclear science and medical radiology.",
-#         description="Specific biographical facts with dates",
-#     ),
-#     TestCase(
-#         question="What is the capital of France?",
-#         ground_truth="Paris is the capital of France.",
-#         description="Simple geographic fact",
-#     ),
-#     # ─────────────────────────────────────────────────────────────────────────
-#     # Questions with fictional entities (agent should NOT hallucinate)
-#     # ─────────────────────────────────────────────────────────────────────────
-#     TestCase(
-#         question="What is the relationship between Alan Turing and Dr. Helena Vargass?",
-#         ground_truth="There is no relationship between Alan Turing and Dr. Helena Vargass because Alan Turing is a real historical figure while Dr. Helena Vargass is not a real person. No historical, academic, scientific, or biographical records contain this name, so no connection of any kind exists. Alan Turing was a human mathematician, logician, cryptanalyst, computer scientist, and theoretical biologist. He was born on 23 June 1912 in Maida Vale, London, England, and died on 7 June 1954 in Wilmslow, Cheshire, England. He was male and held British citizenship. His parents were Julius Mathison Turing and Ethel Sara Turing. He never married and had no children. He studied at Sherborne School, then at King's College, Cambridge, where he completed major mathematical work, and later earned his PhD at Princeton University under Alonzo Church. He worked at King's College Cambridge, the Government Code and Cypher School at Bletchley Park during World War II, the National Physical Laboratory, and the University of Manchester. His fields of work included mathematical logic, computability theory, cryptanalysis, early computer architecture, and developmental biology. His notable achievements included the formulation of the universal Turing machine, foundational contributions to computation theory, major contributions to breaking the German Enigma cipher during World War II, and the proposal of the Turing Test for machine intelligence. He was elected a Fellow of the Royal Society in 1951. Dr. Helena Vargass is fictional, and therefore no factual properties can be provided for this entity.",
-#         description="Mix of real and fictional entity - tests hallucination resistance",
-#     ),
-#     TestCase(
-#         question="Tell me about the collaboration between Dr. Liora Anstrum and Prof. Armin Delacroix.",
-#         ground_truth="There is no collaboration between Dr. Liora Anstrum and Prof. Armin Delacroix because both names refer to fictional individuals. No historical, academic, scientific, or publicly documented persons exist with these names, and therefore no factual properties, biographical details, or real-world collaborations can be provided.",
-#         description="Entirely fictional entities - should refuse to provide details",
-#     ),
-#     TestCase(
-#         question="Describe the joint research between Einstein, Bohr, and Dr. Selwyn Hartmere on quantum mechanics.",
-#         ground_truth="There was no joint research between Albert Einstein, Niels Bohr, and Dr. Selwyn Hartmere because Dr. Selwyn Hartmere is not a real person and therefore no collaboration involving this fictional name ever existed. Albert Einstein and Niels Bohr were real physicists, but they did not conduct joint research together; instead, they engaged in famous scientific and philosophical debates about quantum mechanics, especially at the Solvay Conferences in the 1920s and 1930s. Their interactions were intellectual arguments over foundational issues such as determinism and the Copenhagen interpretation, not co-authored work or shared experiments. Albert Einstein was a human theoretical physicist born on 14 March 1879 in Ulm, Kingdom of Württemberg, German Empire, and he died on 18 April 1955 in Princeton, New Jersey, United States. He held German, Swiss, and American citizenships, was male, and his occupations included theoretical physicist and professor. His parents were Hermann Einstein and Pauline Koch. He married Mileva Marić and later Elsa Einstein and had two sons, Hans Albert Einstein and Eduard Einstein. He studied at ETH Zurich and held academic positions at the University of Zurich, Charles University in Prague, ETH Zurich, the Kaiser Wilhelm Institute for Physics, and the Institute for Advanced Study in Princeton. His scientific fields included relativity, quantum theory, statistical physics, and cosmology, and his major achievements included special relativity, general relativity, the photoelectric effect, and foundational contributions to early quantum physics. He received the 1921 Nobel Prize in Physics, the Copley Medal, and the Max Planck Medal. Niels Bohr was a human theoretical physicist born on 7 October 1885 in Copenhagen, Denmark, where he also died on 18 November 1962. He held Danish citizenship, was male, and his parents were Christian Bohr and Ellen Adler Bohr. He married Margrethe Nørlund and had children including Aage Bohr, who became a Nobel laureate. Niels Bohr studied at the University of Copenhagen and worked with J. J. Thomson and Ernest Rutherford in Cambridge and Manchester. He founded the Institute for Theoretical Physics (now the Niels Bohr Institute) at the University of Copenhagen. His scientific fields included atomic structure, quantum theory, and nuclear physics. His major achievements included the Bohr model of the atom, foundational contributions to quantum mechanics, and the principle of complementarity. He received the 1922 Nobel Prize in Physics and numerous international honors, and he later contributed as a scientific advisor to the Allied nuclear effort during World War II. Because Dr. Selwyn Hartmere does not exist, no factual properties or collaborations can be attributed to this name.",
-#         description="Real scientists mixed with fictional - partial hallucination trap",
-#     ),
-#     # ─────────────────────────────────────────────────────────────────────────
-#     # Comparison questions (tests factual accuracy across entities)
-#     # ─────────────────────────────────────────────────────────────────────────
-#     TestCase(
-#         question="Compare the contributions of Ada Lovelace and Charles Babbage to computing.",
-#         ground_truth="Ada Lovelace and Charles Babbage made foundational but distinct contributions to the early history of computing. Charles Babbage, a human mathematician, inventor, and mechanical engineer, conceived the Difference Engine and designed the Analytical Engine, introducing key architectural principles of modern computers including a memory store, a processing unit (the mill), conditional branching, loops, and programmable operations. Ada Lovelace, a human mathematician and writer, studied the Analytical Engine, translated and expanded Luigi Menabrea’s paper on it, and added extensive annotations that included the algorithm for computing Bernoulli numbers—widely regarded as the first published computer program. Lovelace also articulated the theoretical insight that the machine could manipulate symbols beyond numerical calculation, envisioning general-purpose computing and early notions of software. Ada Lovelace was born on 10 December 1815 in London, England, died on 27 November 1852 in Marylebone, London, held British citizenship, was female, and her parents were Lord George Gordon Byron and Anne Isabella Milbanke Byron. She married William King-Noel, later Earl of Lovelace, and had three children: Byron, Anne Isabella, and Ralph. She studied mathematics privately under mentors such as Augustus De Morgan and Mary Somerville and worked primarily as an independent thinker. Her fields included mathematics and early computational theory. Charles Babbage was born on 26 December 1791 in London, England, died on 18 October 1871 in London, held British citizenship, was male, and his parents were Benjamin Babbage and Betsy Plumleigh Teape. He married Georgiana Whitmore and had several children. He studied at Trinity College and Peterhouse, Cambridge, later became Lucasian Professor of Mathematics, and worked on mechanical computation, mathematical tables, and precision engineering. His designs for the Analytical Engine influenced later generations of computer scientists and historians. Babbage provided the conceptual hardware architecture of computing, while Lovelace contributed the earliest software concepts and theoretical understanding of symbolic computation, and they collaborated intellectually on the Analytical Engine project.",
-#         description="Comparison of two related historical figures",
-#     ),
-#     # ─────────────────────────────────────────────────────────────────────────
-#     # Specific factual queries (tests precision)
-#     # ─────────────────────────────────────────────────────────────────────────
-#     TestCase(
-#         question="What organization did Alan Turing work for during World War II?",
-#         ground_truth="During World War II, Alan Turing worked for the Government Code and Cypher School (GC&CS) at Bletchley Park, the British government's cryptanalytic center responsible for signals intelligence and codebreaking. The organization was founded in 1919, operated at Bletchley Park during the war, and later became the foundation of GCHQ. Alan Turing was a human mathematician, logician, cryptanalyst, computer scientist, and theoretical biologist born on 23 June 1912 in Maida Vale, London, and he died on 7 June 1954 in Wilmslow, Cheshire. He held British citizenship, was male, and his parents were Julius Mathison Turing and Ethel Sara Turing. He never married and had no children. Turing studied at Sherborne School, King's College Cambridge, and earned his PhD at Princeton University under Alonzo Church. He worked at King's College Cambridge, the Government Code and Cypher School at Bletchley Park, the National Physical Laboratory, and the University of Manchester. His fields included mathematical logic, computability theory, cryptanalysis, early computer architecture, and developmental biology. His major achievements included formulating the universal Turing machine, foundational contributions to computation theory, breaking key components of the Enigma cipher during World War II, and proposing the Turing Test for machine intelligence. He was elected a Fellow of the Royal Society in recognition of his scientific contributions.",
-#         description="Specific historical fact requiring precise answer",
-#     ),
-# ]
 
 
 def evaluate_against_ground_truth(

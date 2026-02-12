@@ -17,8 +17,11 @@ References:
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+from ..settings import AIMON_DEVICE, resolve_device
 
 
 # ==========================================================================
@@ -105,6 +108,7 @@ class AimonEvaluator:
         self.threshold = threshold
         self.model: Any = None
         self._loaded = False
+        self.device = "cpu"
 
     def load_model(self) -> None:
         """Load the HDM-2 model from HuggingFace."""
@@ -114,10 +118,30 @@ class AimonEvaluator:
         try:
             from hdm2 import HallucinationDetectionModel
 
+            self.device = resolve_device(AIMON_DEVICE)
             print("Loading AIMon HDM-2-3B hallucination detection model...")
-            self.model = HallucinationDetectionModel()
+            kwargs: Dict[str, Any] = {}
+
+            # Best-effort device argument mapping across hdm2 versions.
+            sig = inspect.signature(HallucinationDetectionModel.__init__)
+            if "device" in sig.parameters:
+                kwargs["device"] = self.device
+            elif "torch_device" in sig.parameters:
+                kwargs["torch_device"] = self.device
+            elif "model_device" in sig.parameters:
+                kwargs["model_device"] = self.device
+
+            self.model = HallucinationDetectionModel(**kwargs)
+
+            # Secondary fallback if wrapper exposes a .to() method.
+            if hasattr(self.model, "to"):
+                try:
+                    self.model = self.model.to(self.device)
+                except Exception:
+                    pass
+
             self._loaded = True
-            print("AIMon model loaded.\n")
+            print(f"AIMon model loaded (device: {self.device}).\n")
         except ImportError as e:
             raise ImportError(
                 "hdm2 package not installed. Install with: pip install hdm2"

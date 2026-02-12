@@ -8,15 +8,19 @@ pydantic
 SPARQLWrapper
 requests
 beautifulsoup4
+python-dotenv
 
 # Optional tracing (used if configured)
 langsmith
 
 # Benchmark/evaluation dependencies
-transformers
+transformers<4.56
 torch
 sentencepiece
 
 # Optional evaluators/integrations
 langchain-openai
 hdm2
+
+# Testing
+pytest

@@ -33,6 +33,17 @@ def main():
         help="Disable RAGTruth evaluation",
     )
     parser.add_argument(
+        "--aimon",
+        action="store_true",
+        default=True,
+        help="Enable AIMon HDM-2 evaluation (default: enabled)",
+    )
+    parser.add_argument(
+        "--no-aimon",
+        action="store_true",
+        help="Disable AIMon HDM-2 evaluation",
+    )
+    parser.add_argument(
         "--use-ragtruth-data",
         action="store_true",
         help="Use RAGTruth QA dataset instead of the built-in 8 questions",
@@ -55,10 +66,27 @@ def main():
         default=0.5,
         help="Hallucination score threshold (default: 0.5)",
     )
+    parser.add_argument(
+        "--eval-context-mode",
+        choices=["ground_truth", "combined"],
+        default="ground_truth",
+        help=(
+            "Primary evaluation context mode: "
+            "'ground_truth' (default, scientifically cleaner) or "
+            "'combined' (legacy ground truth + retrieved context for RAG)."
+        ),
+    )
+    parser.add_argument(
+        "--benchmark-temperature",
+        type=float,
+        default=0.0,
+        help="Decoding temperature used for both compared models in benchmarks (default: 0.0)",
+    )
     args = parser.parse_args()
 
     # Handle ragtruth flag
     use_ragtruth = args.ragtruth and not args.no_ragtruth
+    use_aimon = args.aimon and not args.no_aimon
 
     test_cases = GROUND_TRUTH_TEST_CASES
 
@@ -82,9 +110,12 @@ def main():
     results = run_comparison_suite(
         test_cases=test_cases,
         threshold=args.threshold,
+        eval_context_mode=args.eval_context_mode,
+        benchmark_temperature=args.benchmark_temperature,
         verbose=True,
         use_llm_judge=args.llm_judge,
         use_ragtruth=use_ragtruth,
+        use_aimon=use_aimon,
     )
 
     # Print summary
