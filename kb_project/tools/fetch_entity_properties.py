@@ -26,6 +26,10 @@ _INTENT_PROPERTY_RULES: List[tuple[tuple[str, ...], tuple[str, ...]]] = [
     (("discover", "discovered", "discoverer", "invent", "invented", "inventor"), ("P61", "P575")),
     (("born", "birth", "date of birth"), ("P569",)),
     (("died", "death", "date of death"), ("P570",)),
+    (
+        ("major achievements", "achievements", "accomplishments", "contribution", "contributions", "known for"),
+        ("P101", "P800", "P166", "P39", "P108", "P61"),
+    ),
     (("capital",), ("P36", "P1376")),
     (("wrote", "author", "novel", "book"), ("P50", "P577")),
     (("painted", "painter", "painted by"), ("P170",)),

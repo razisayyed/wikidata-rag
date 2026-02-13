@@ -338,6 +338,13 @@ def _case(
 
 GROUND_TRUTH_TEST_CASES: List[TestCase] = [
     _case(
+        "case_00",
+        "What is the capital of the country where Tesla was born?",
+        "Nikola Tesla was born in Croatia. The capital of Croatia is Zagreb.",
+        "multi_hop",
+        accepted_aliases=[["Zagreb"]],  # Accept just the capital name as well
+    ),
+    _case(
         "case_01",
         "Who is Albert Einstein?",
         "Albert Einstein was a German-born theoretical physicist who developed special and general relativity and won the 1921 Nobel Prize in Physics.",

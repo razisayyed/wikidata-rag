@@ -153,3 +153,47 @@ def test_fetch_entity_properties_auto_adds_discoverer_properties_from_question(m
     assert "P575" in payload
     assert "P61: discoverer or inventor" in payload
     assert "Alexander Fleming" in payload
+
+
+def test_fetch_entity_properties_auto_adds_broad_achievement_bundle(monkeypatch):
+    reset_tool_protocol_state()
+    set_question_context("When was this scientist born and what were their major achievements?")
+    register_search_candidates(
+        entity_name="Example Scientist",
+        candidates=[{"qid": "Q999", "label": "Example Scientist"}],
+    )
+
+    module = importlib.import_module("kb_project.tools.fetch_entity_properties")
+    captured = {"query": ""}
+
+    def fake_run_sparql(query):
+        captured["query"] = query
+        return {
+            "results": {
+                "bindings": [
+                    {
+                        "itemLabel": {"value": "Example Scientist"},
+                        "itemDescription": {"value": "scientist"},
+                        "p106ValueLabel": {"value": "physicist"},
+                        "p101ValueLabel": {"value": "quantum physics"},
+                        "p800ValueLabel": {"value": "Example Landmark Work"},
+                        "p166ValueLabel": {"value": "Nobel Prize in Physics"},
+                    }
+                ]
+            }
+        }
+
+    monkeypatch.setattr(module, "_run_sparql", fake_run_sparql)
+
+    payload = module.fetch_entity_properties.invoke(
+        {"qid": "Q999", "properties": ["P106"]}
+    )
+
+    # Broader coverage beyond the single originally requested property.
+    assert "p:P101" in captured["query"]
+    assert "p:P800" in captured["query"]
+    assert "p:P166" in captured["query"]
+    assert "Tool note: auto-added intent properties:" in payload
+    assert "P101" in payload
+    assert "P800" in payload
+    assert "P166" in payload

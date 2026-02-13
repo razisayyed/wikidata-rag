@@ -184,6 +184,16 @@ STEP 2 — Select best candidates, then fetch their properties
     - Roles/employment: P39 (position held), P108 (employer) with qualifiers
     - Places: P17 (country), P131 (located in the administrative territorial entity)
 
+  COVERAGE STRATEGY (MANDATORY):
+  - Be generous in property selection when the question asks for broad information
+    (e.g., "major achievements", "contributions", "known for", "compare contributions").
+  - For broad questions, do a wider first-pass fetch (not just 1-2 properties), then synthesize
+    only the most relevant supported facts in the final answer.
+  - For person achievement/contribution questions, include multiple evidence dimensions when relevant:
+    occupation, field of work, notable works, awards, positions/employers, and discoveries/inventions.
+  - Do not hard-code a single property as sufficient for broad questions.
+  - Keep final answer concise, but retrieval coverage should be broad enough to support it.
+
 STEP 3 — wikidata_sparql(sparql, max_rows)
   `wikidata_sparql` is REQUIRED before producing the final answer when relationship verification, temporal filtering, or joins are needed.
   REQUIRED when you need any of the following:
