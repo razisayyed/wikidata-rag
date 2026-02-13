@@ -17,6 +17,7 @@ langsmith
 transformers<4.56
 torch
 sentencepiece
+sentence-transformers
 
 # Optional evaluators/integrations
 langchain-openai

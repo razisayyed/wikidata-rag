@@ -208,7 +208,9 @@ def run_agent_with_capture(question: str, agent=None, verbose: bool = True) -> A
                     matched_call.output = content_to_text(msg.content)
                     run.tool_calls.append(matched_call)
                     if verbose:
-                        print(f"  Output from {matched_call.name}: {matched_call.output[:240]}")
+                        print(
+                            f"  Output from {matched_call.name}: {matched_call.output[:240]}"
+                        )
                     continue
 
                 if hasattr(msg, "content") and msg.content:
@@ -345,10 +347,17 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
     _case(
         "case_02",
         "When was Niels Bohr born and what were his major achievements?",
-        "Niels Bohr was born on 7 October 1885. He developed the Bohr model of the atom, made foundational contributions to quantum theory, and won the 1922 Nobel Prize in Physics.",
+        "Niels Bohr was born on 7 October 1885 in Copenhagen, Denmark. He was a Danish theoretical physicist who made foundational contributions to modern atomic physics and quantum theory. Bohr proposed the Bohr model of the atom in 1913, introducing quantized electron orbits to explain atomic spectra and the structure of the hydrogen atom. He later contributed to the development of quantum mechanics, including the principle of complementarity and the Copenhagen interpretation. Bohr played a central role in establishing the Institute for Theoretical Physics at the University of Copenhagen, which became a major center for quantum research. He was awarded the Nobel Prize in Physics in 1922 for his investigations into the structure of atoms and the radiation emitted from them.",
         "science_history",
         accepted_aliases=[
             ["7 October 1885", "October 7, 1885", "1885-10-07"],
+            ["Copenhagen, Denmark", "Copenhagen"],
+            ["Bohr model of the atom", "Bohr atomic model", "Bohr model"],
+            ["principle of complementarity", "complementarity"],
+            [
+                "Copenhagen interpretation",
+                "Copenhagen interpretation of quantum mechanics",
+            ],
             ["1922 Nobel Prize in Physics", "Nobel Prize in Physics 1922"],
         ],
     ),
@@ -365,7 +374,11 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
         "history",
         accepted_aliases=[
             ["Government Code and Cypher School", "GC&CS"],
-            ["Government Code and Cypher School", "Government Communications Headquarters", "GCHQ"],
+            [
+                "Government Code and Cypher School",
+                "Government Communications Headquarters",
+                "GCHQ",
+            ],
             ["Bletchley Park"],
         ],
     ),
@@ -429,7 +442,9 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
         "What is the boiling point of water at sea level?",
         "At sea level, water boils at 100 degrees Celsius (212 degrees Fahrenheit).",
         "physics",
-        accepted_aliases=[["100 degrees Celsius", "100 C", "212 F", "212 degrees Fahrenheit"]],
+        accepted_aliases=[
+            ["100 degrees Celsius", "100 C", "212 F", "212 degrees Fahrenheit"]
+        ],
     ),
     _case(
         "case_14",

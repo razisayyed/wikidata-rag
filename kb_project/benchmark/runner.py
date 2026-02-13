@@ -7,11 +7,13 @@ import shutil
 import textwrap
 from typing import Dict, List, Optional
 
+from equivalence_evaluator.evaluator import EquivalenceEvaluator, is_equivalence_method
+from equivalence_evaluator.utils import factual_judge_adapter
+
 from ..prompt_only_llm import answer_question_prompt_only, build_prompt_only_agent
 from ..settings import OPENAI_JUDGE_MODEL, RAGTRUTH_MODEL
 from ..wikidata_rag_agent import build_agent
 from .aimon import AimonEvaluator
-from .evaluation import evaluate_response
 from .llm_judge import judge_responses
 from .models import (
     AIMON_WINNER_EPSILON,
@@ -26,7 +28,7 @@ from .models import (
     winner_from_labels,
 )
 from .ragtruth import RAGTruthEvaluator
-from .vectra import GROUND_TRUTH_TEST_CASES, run_agent_with_capture, load_hallucination_model
+from .vectra import GROUND_TRUTH_TEST_CASES, run_agent_with_capture
 
 EVALUATOR_ORDER = ["vectara", "aimon", "llm_judge", "ragtruth"]
 
@@ -93,44 +95,59 @@ def _evaluate_vectara(
     rag_output: ModelOutput,
     baseline_output: ModelOutput,
     reference_ground_truth: str,
-    threshold: float,
-    hallucination_model,
+    threshold: float,  # preserved for stable internal API
+    hallucination_model,  # preserved for stable internal API
+    equivalence_evaluator: EquivalenceEvaluator,
 ) -> EvaluatorResult:
+    _ = threshold, hallucination_model
     try:
-        rag_eval = evaluate_response(
-            response=rag_output.response,
+        rag_equiv = equivalence_evaluator.evaluate(
             ground_truth=reference_ground_truth,
-            retrieved_context="",
-            model=hallucination_model,
-            threshold=threshold,
-            eval_context_mode="ground_truth",
+            rag_output=rag_output.response,
+            baseline_output=baseline_output.response,
         )
-        baseline_eval = evaluate_response(
-            response=baseline_output.response,
+        baseline_equiv = equivalence_evaluator.evaluate(
             ground_truth=reference_ground_truth,
-            retrieved_context="",
-            model=hallucination_model,
-            threshold=threshold,
-            eval_context_mode="ground_truth",
+            rag_output=baseline_output.response,
+            baseline_output=rag_output.response,
         )
 
-        rag_label = label_from_hallucination_flag(rag_eval["is_hallucination"])
-        baseline_label = label_from_hallucination_flag(baseline_eval["is_hallucination"])
+        rag_method = str(rag_equiv.get("method", ""))
+        baseline_method = str(baseline_equiv.get("method", ""))
+        rag_score = float(rag_equiv.get("score", 0.0) or 0.0)
+        baseline_score = float(baseline_equiv.get("score", 0.0) or 0.0)
+
+        if rag_method == "factual_judge":
+            rag_label = "factual" if bool(rag_equiv.get("equivalent", False)) else "hallucinated"
+        else:
+            rag_label = "factual" if is_equivalence_method(rag_method) else "hallucinated"
+
+        if baseline_method == "factual_judge":
+            baseline_label = (
+                "factual" if bool(baseline_equiv.get("equivalent", False)) else "hallucinated"
+            )
+        else:
+            baseline_label = "factual" if is_equivalence_method(baseline_method) else "hallucinated"
+
+        notes = (
+            "Equivalence pipeline. "
+            f"RAG method={rag_method}; BASELINE method={baseline_method}"
+        )
         return EvaluatorResult(
             name="vectara",
             status="completed",
             rag_label=rag_label,
             baseline_label=baseline_label,
-            rag_score=float(rag_eval["score"]),
-            baseline_score=float(baseline_eval["score"]),
+            rag_score=rag_score,
+            baseline_score=baseline_score,
             winner=winner_from_labels(
                 rag_label=rag_label,
                 baseline_label=baseline_label,
-                rag_score=float(rag_eval["score"]),
-                baseline_score=float(baseline_eval["score"]),
+                rag_score=rag_score,
+                baseline_score=baseline_score,
                 lower_is_better=False,
             ),
-            notes="Factual consistency against ground truth.",
+            notes=notes,
         )
     except Exception as exc:
         return _skipped_result("vectara", f"Vectara evaluation unavailable: {exc}")
@@ -435,7 +452,10 @@ def run_comparison_suite(
     if verbose:
         print("Loading benchmark runtime...")
 
-    hallucination_model = load_hallucination_model()
+    equivalence_evaluator = EquivalenceEvaluator(
+        factual_judge_callable=factual_judge_adapter,
+        verbose=False,
+    )
     rag_agent = build_agent(temperature=temperature)
     baseline_agent = build_prompt_only_agent(temperature=temperature)
 
@@ -503,7 +523,8 @@ def run_comparison_suite(
                     baseline_output=baseline_output,
                     reference_ground_truth=reference_ground_truth,
                     threshold=threshold,
-                    hallucination_model=hallucination_model,
+                    hallucination_model=None,
+                    equivalence_evaluator=equivalence_evaluator,
                 ),
                 "aimon": _evaluate_aimon(
                     rag_output=rag_output,
