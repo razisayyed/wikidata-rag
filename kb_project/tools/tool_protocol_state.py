@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from threading import Lock
 from typing import Dict, Iterable, List, Set
 
@@ -10,6 +11,21 @@ _ALLOWED_QIDS: Set[str] = set()
 _QID_TO_ENTITY: Dict[str, str] = {}
 _SPARQL_ATTEMPTED = False
 _QUESTION_CONTEXT = ""
+
+
+def _normalize_qid(raw: str) -> str:
+    text = (raw or "").strip()
+    if not text:
+        return ""
+    uri_match = re.search(r"/(Q\d+)$", text, flags=re.IGNORECASE)
+    if uri_match:
+        return uri_match.group(1).upper()
+    if text.lower().startswith("wd:"):
+        text = text.split(":", 1)[1]
+    text = text.upper()
+    if text.startswith("Q") and text[1:].isdigit():
+        return text
+    return ""
 
 
 def reset_tool_protocol_state() -> None:
@@ -33,8 +49,8 @@ def register_search_candidates(
 
     with _STATE_LOCK:
         for candidate in candidates:
-            qid = str(candidate.get("qid", "")).strip().upper()
-            if not qid.startswith("Q") or len(qid) < 2 or not qid[1:].isdigit():
+            qid = _normalize_qid(str(candidate.get("qid", "")))
+            if not qid:
                 continue
             _ALLOWED_QIDS.add(qid)
             if normalized_entity:
@@ -45,8 +61,8 @@ def register_search_candidates(
 
 
 def is_qid_authorized(qid: str) -> bool:
-    """Return whether a QID is authorized by prior candidate search."""
-    normalized = (qid or "").strip().upper()
+    """Return whether a QID is authorized by prior search or inferred fetches."""
+    normalized = _normalize_qid(qid)
     with _STATE_LOCK:
         return normalized in _ALLOWED_QIDS
 
@@ -55,6 +71,20 @@ def get_authorized_qids(limit: int = 15) -> List[str]:
     """Return a deterministic slice of currently authorized QIDs."""
     with _STATE_LOCK:
         return sorted(_ALLOWED_QIDS)[: max(1, limit)]
+
+
+def register_inferred_qids(qids: Iterable[str]) -> List[str]:
+    """Register additional QIDs inferred from prior property fetch results."""
+    added: List[str] = []
+    with _STATE_LOCK:
+        for raw_qid in qids:
+            qid = _normalize_qid(raw_qid)
+            if not qid:
+                continue
+            if qid not in _ALLOWED_QIDS:
+                added.append(qid)
+            _ALLOWED_QIDS.add(qid)
+    return added
 
 
 def mark_sparql_attempt() -> None:

@@ -99,6 +99,61 @@ def test_fetch_entity_properties_allows_qid_from_search(monkeypatch):
     assert "Paris" in payload
 
 
+def test_fetch_entity_properties_allows_qid_inferred_from_previous_fetch(monkeypatch):
+    reset_tool_protocol_state()
+    fetch_module = importlib.import_module("kb_project.tools.fetch_entity_properties")
+
+    # Seed protocol state with one explicit candidate.
+    register_search_candidates(
+        entity_name="penicillin",
+        candidates=[{"qid": "Q12190", "label": "penicillin"}],
+    )
+
+    def fake_run_sparql(query):
+        if "wd:Q12190" in query:
+            return {
+                "results": {
+                    "bindings": [
+                        {
+                            "itemLabel": {"value": "penicillin"},
+                            "itemDescription": {"value": "group of antibiotics"},
+                            "p61Value": {"value": "http://www.wikidata.org/entity/Q203"},
+                            "p61ValueLabel": {"value": "Alexander Fleming"},
+                        }
+                    ]
+                }
+            }
+        if "wd:Q203" in query:
+            return {
+                "results": {
+                    "bindings": [
+                        {
+                            "itemLabel": {"value": "Alexander Fleming"},
+                            "itemDescription": {"value": "Scottish physician"},
+                            "p31ValueLabel": {"value": "human"},
+                        }
+                    ]
+                }
+            }
+        return {"results": {"bindings": []}}
+
+    monkeypatch.setattr(fetch_module, "_run_sparql", fake_run_sparql)
+
+    first_payload = fetch_module.fetch_entity_properties.invoke(
+        {"qid": "Q12190", "properties": ["P61"]}
+    )
+    assert "inferred QIDs now authorized" in first_payload
+    assert "Q203" in first_payload
+
+    # No intermediate search call for Q203: must still be accepted.
+    second_payload = fetch_module.fetch_entity_properties.invoke(
+        {"qid": "Q203", "properties": ["P31"]}
+    )
+    assert "Tool-order protocol violation" not in second_payload
+    assert "Entity: Alexander Fleming" in second_payload
+    assert "P31: instance of" in second_payload
+
+
 def test_protocol_state_reset_disables_previous_qids():
     reset_tool_protocol_state()
     fetch_module = importlib.import_module("kb_project.tools.fetch_entity_properties")

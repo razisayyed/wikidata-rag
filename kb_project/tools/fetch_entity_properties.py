@@ -16,6 +16,7 @@ from .tool_protocol_state import (
     get_authorized_qids,
     get_question_context,
     is_qid_authorized,
+    register_inferred_qids,
 )
 from ..wikidata.properties import WIKIDATA_PROPERTIES
 from ..wikidata.sparql import run_sparql as _run_sparql
@@ -149,6 +150,34 @@ def _augment_properties_for_question(
     return merged, auto_added
 
 
+def _extract_qids_from_bindings(bindings: List[Dict[str, Any]]) -> List[str]:
+    """
+    Extract Wikidata entity QIDs from raw SPARQL binding values.
+
+    This is used to authorize follow-up fetches for related entities discovered
+    during an earlier fetch_entity_properties call.
+    """
+    found: set[str] = set()
+    for row in bindings:
+        for binding in row.values():
+            if not isinstance(binding, dict):
+                continue
+            value = str(binding.get("value", "")).strip()
+            if not value:
+                continue
+            if value.lower().startswith("http://www.wikidata.org/entity/q"):
+                qid = value.rsplit("/", 1)[-1].upper()
+            elif value.lower().startswith("https://www.wikidata.org/entity/q"):
+                qid = value.rsplit("/", 1)[-1].upper()
+            elif value.lower().startswith("wd:q"):
+                qid = value.split(":", 1)[-1].upper()
+            else:
+                continue
+            if qid.startswith("Q") and qid[1:].isdigit():
+                found.add(qid)
+    return sorted(found)
+
+
 class FetchPropertiesInput(BaseModel):
     """Input for fetching properties by QID."""
 
@@ -262,12 +291,22 @@ def fetch_entity_properties(
         if not bindings:
             return f"Error: Entity {qid} not found or has no data for requested properties."
 
+        inferred_qids = _extract_qids_from_bindings(bindings)
+        newly_authorized_qids = register_inferred_qids(inferred_qids)
+
         formatted_results, wikipedia_url = format_property_results(
             bindings=bindings,
             valid_props=valid_props,
             qid=qid,
             include_qualifiers=include_qualifiers,
         )
+        if newly_authorized_qids:
+            formatted_results = (
+                "Tool note: inferred QIDs now authorized for follow-up fetches: "
+                + ", ".join(newly_authorized_qids[:8])
+                + ("\n" if len(newly_authorized_qids) <= 8 else ", ...\n")
+                + formatted_results
+            )
         if auto_added_props:
             formatted_results = (
                 "Tool note: auto-added intent properties: "
@@ -282,6 +321,7 @@ def fetch_entity_properties(
                 "qid": qid,
                 "properties": properties,
                 "auto_added_properties": auto_added_props,
+                "newly_authorized_qids": newly_authorized_qids,
                 "include_qualifiers": include_qualifiers,
             },
             formatted_results,

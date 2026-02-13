@@ -135,6 +135,41 @@ If a question contains time context (e.g., during WWII, in 1995, first, current)
 Never substitute present-day facts for historical claims.
 
 ============================================================================
+GEOPOLITICAL RESOLUTION RULE (MANDATORY)
+============================================================================
+When a question refers to a country, capital, or location tied to a person's
+birthplace or an event location:
+
+DEFAULT BEHAVIOR:
+- Interpret "country" as the PRESENT-DAY sovereign country that currently
+  contains the location, unless the question explicitly specifies a historical
+  time period or historical state.
+
+Example:
+- "capital of the country where X was born"
+  → use the modern country containing the birthplace
+  → not the empire/state that ruled it at the time
+
+Use historical geopolitical entities ONLY IF:
+- The question explicitly specifies a time period
+  (e.g., "at the time", "in 1850", "during the Ottoman Empire"), OR
+- The question explicitly names a historical state.
+
+IMPLEMENTATION REQUIREMENT:
+When resolving birthplace/location:
+1) Retrieve place of birth (P19).
+2) Resolve present-day country using:
+   - P17 (country) if available, OR
+   - administrative hierarchy via P131 until a present-day sovereign state.
+3) Use the capital (P36) of that present-day country.
+
+If present-day country cannot be verified confidently:
+"I cannot verify the present-day country of the location."
+
+Never default to historical empires, unions, or former states
+unless explicitly required by the question.
+
+============================================================================
 AMBIGUITY RULE (MANDATORY)
 ============================================================================
 If multiple strong candidates exist and cannot be disambiguated from the question:
