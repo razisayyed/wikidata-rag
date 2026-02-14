@@ -22,6 +22,7 @@ from ..wikidata.properties import WIKIDATA_PROPERTIES
 from ..wikidata.sparql import run_sparql as _run_sparql
 
 logger = configure_logging()
+_PROPERTY_ID_PATTERN = re.compile(r"^P\d+$")
 
 _INTENT_PROPERTY_RULES: List[tuple[tuple[str, ...], tuple[str, ...]]] = [
     (("discover", "discovered", "discoverer", "invent", "invented", "inventor"), ("P61", "P575")),
@@ -40,6 +41,13 @@ _INTENT_PROPERTY_RULES: List[tuple[tuple[str, ...], tuple[str, ...]]] = [
     (("work for", "worked for", "employer", "organization"), ("P108", "P39")),
 ]
 _BASELINE_PROPERTY_GUARDRAIL: tuple[str, ...] = ("P31",)
+
+
+def _normalize_property_id(raw: Any) -> str:
+    prop_id = str(raw or "").strip().upper()
+    if not _PROPERTY_ID_PATTERN.match(prop_id):
+        return ""
+    return prop_id
 
 
 def _format_time_value(value: str) -> str:
@@ -122,10 +130,8 @@ def _augment_properties_for_question(
     seen = set()
 
     def _add(prop: str) -> None:
-        prop_id = (prop or "").strip().upper()
+        prop_id = _normalize_property_id(prop)
         if not prop_id or prop_id in seen:
-            return
-        if prop_id not in WIKIDATA_PROPERTIES:
             return
         seen.add(prop_id)
         merged.append(prop_id)
@@ -262,11 +268,11 @@ def fetch_entity_properties(
         else:
             processed_properties.append(str(p))
 
-    valid_props = [
-        p.strip().upper()
-        for p in processed_properties
-        if p.strip().upper() in WIKIDATA_PROPERTIES
-    ]
+    valid_props = []
+    for raw_prop in processed_properties:
+        prop_id = _normalize_property_id(raw_prop)
+        if prop_id:
+            valid_props.append(prop_id)
     valid_props, auto_added_props = _augment_properties_for_question(
         valid_props,
         question=get_question_context(),
@@ -340,11 +346,13 @@ def build_dynamic_sparql_query(
 ) -> str:
     """Build a statement-level SPARQL query for the requested properties."""
 
-    valid_props = [
-        p.strip().upper()
-        for p in property_ids
-        if p.strip().upper() in WIKIDATA_PROPERTIES
-    ]
+    valid_props = []
+    seen_props = set()
+    for raw_prop in property_ids:
+        prop_id = _normalize_property_id(raw_prop)
+        if prop_id and prop_id not in seen_props:
+            seen_props.add(prop_id)
+            valid_props.append(prop_id)
 
     if not valid_props:
         return ""
@@ -488,7 +496,10 @@ def format_property_results(
     lines.append("")
 
     for prop in valid_props:
-        prop_name = WIKIDATA_PROPERTIES.get(prop, prop)
+        prop_name = WIKIDATA_PROPERTIES.get(
+            prop,
+            "property (not in suggestion catalog)",
+        )
         label = f"{prop}: {prop_name}"
         entries = collected[prop][:5]
         if entries:

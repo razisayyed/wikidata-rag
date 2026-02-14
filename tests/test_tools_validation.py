@@ -113,6 +113,13 @@ def test_property_catalog_includes_core_physical_quantity_properties():
     assert "P2052" in WIKIDATA_PROPERTIES  # speed
 
 
+def test_property_catalog_includes_additional_disambiguation_and_name_properties():
+    assert "P1889" in WIKIDATA_PROPERTIES  # different from
+    assert "P460" in WIKIDATA_PROPERTIES  # said to be the same as
+    assert "P1705" in WIKIDATA_PROPERTIES  # native label
+    assert "P1448" in WIKIDATA_PROPERTIES  # official name
+
+
 def test_fetch_entity_properties_auto_adds_discoverer_properties_from_question(monkeypatch):
     reset_tool_protocol_state()
     set_question_context("Who discovered penicillin?")
@@ -197,3 +204,39 @@ def test_fetch_entity_properties_auto_adds_broad_achievement_bundle(monkeypatch)
     assert "P101" in payload
     assert "P800" in payload
     assert "P166" in payload
+
+
+def test_fetch_entity_properties_accepts_non_catalog_property_id(monkeypatch):
+    reset_tool_protocol_state()
+    set_question_context("Give me a broad profile.")
+    register_search_candidates(
+        entity_name="Example Entity",
+        candidates=[{"qid": "Q4242", "label": "Example Entity"}],
+    )
+
+    module = importlib.import_module("kb_project.tools.fetch_entity_properties")
+    captured = {"query": ""}
+
+    def fake_run_sparql(query):
+        captured["query"] = query
+        return {
+            "results": {
+                "bindings": [
+                    {
+                        "itemLabel": {"value": "Example Entity"},
+                        "itemDescription": {"value": "example"},
+                        "p31ValueLabel": {"value": "human"},
+                    }
+                ]
+            }
+        }
+
+    monkeypatch.setattr(module, "_run_sparql", fake_run_sparql)
+
+    payload = module.fetch_entity_properties.invoke(
+        {"qid": "Q4242", "properties": ["P999999"]}
+    )
+
+    # Unknown-but-valid property IDs should be passed through (suggestions, not allowlist).
+    assert "p:P999999" in captured["query"]
+    assert "P999999: property (not in suggestion catalog)" in payload

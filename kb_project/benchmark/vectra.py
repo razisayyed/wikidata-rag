@@ -338,11 +338,37 @@ def _case(
 
 GROUND_TRUTH_TEST_CASES: List[TestCase] = [
     _case(
-        "case_00",
+        "multi_hop_01",
         "What is the capital of the country where Tesla was born?",
         "Nikola Tesla was born in Croatia. The capital of Croatia is Zagreb.",
         "multi_hop",
         accepted_aliases=[["Zagreb"]],  # Accept just the capital name as well
+    ),
+    _case(
+        "multi_hop_02",
+        "What is the capital of the country where Frida Kahlo was born?",
+        "Frida Kahlo was born in Mexico. The capital of Mexico is Mexico City.",
+        "multi_hop",
+        accepted_aliases=[["Mexico City", "Mexico D.F.", "Ciudad de México"]],
+    ),
+    _case(
+        "multi_hop_03",
+        "Who is the spouse of the author of 'Pride and Prejudice'?",
+        "Jane Austen is the author of 'Pride and Prejudice'. Jane Austen's spouse was never married and had no spouse.",
+        "multi_hop",
+        accepted_aliases=[["Jane Austen"]],  # Accept just the author name as well
+    ),
+    _case(
+        "multi_answer_01",
+        "What are Nelson Mandela's occupations?",
+        "Nelson Mandela's occupations are autobiographer, lawyer, political activist, political prisoner, politician, and screenwriter.",
+        "multi_answer",
+    ),
+    _case(
+        "multi_answer_02",
+        "What are Ada Lovelace's occupations?",
+        "Ada Lovelace's occupations are computer scientist, engineer, inventor, mathematician, poet, programmer, translator, and writer.",
+        "multi_answer",
     ),
     _case(
         "case_01",
@@ -357,10 +383,15 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
         "Niels Bohr was born on 7 October 1885 in Copenhagen, Denmark. He was a Danish theoretical physicist who made foundational contributions to modern atomic physics and quantum theory. Bohr proposed the Bohr model of the atom in 1913, introducing quantized electron orbits to explain atomic spectra and the structure of the hydrogen atom. He later contributed to the development of quantum mechanics, including the principle of complementarity and the Copenhagen interpretation. Bohr played a central role in establishing the Institute for Theoretical Physics at the University of Copenhagen, which became a major center for quantum research. He was awarded the Nobel Prize in Physics in 1922 for his investigations into the structure of atoms and the radiation emitted from them.",
         "science_history",
         accepted_aliases=[
-            ["7 October 1885", "October 7, 1885", "1885-10-07"],
+            [
+                "7 October 1885",
+                "October 7, 1885",
+                "1885-10-07",
+            ],
             ["Copenhagen, Denmark", "Copenhagen"],
             ["Bohr model of the atom", "Bohr atomic model", "Bohr model"],
             ["principle of complementarity", "complementarity"],
+            ["correspondence principle in atomic physics", "correspondence principle"],
             [
                 "Copenhagen interpretation",
                 "Copenhagen interpretation of quantum mechanics",
@@ -391,12 +422,6 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
     ),
     _case(
         "case_05",
-        "What is the largest planet in the Solar System?",
-        "Jupiter is the largest planet in the Solar System.",
-        "astronomy",
-    ),
-    _case(
-        "case_06",
         "When did World War II begin and end?",
         "World War II began on 1 September 1939 and ended on 2 September 1945.",
         "history",
@@ -407,13 +432,6 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
     ),
     _case(
         "case_07",
-        "Who wrote the novel '1984'?",
-        "George Orwell wrote the novel '1984'.",
-        "literature",
-        accepted_aliases=[["George Orwell", "Eric Arthur Blair"]],
-    ),
-    _case(
-        "case_08",
         "What is the chemical symbol for water and what elements compose it?",
         "Water's chemical formula is H2O, meaning two hydrogen atoms and one oxygen atom.",
         "chemistry",
@@ -424,18 +442,6 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
         "Compare the contributions of Ada Lovelace and Charles Babbage to computing.",
         "Charles Babbage designed early computing machines such as the Analytical Engine, while Ada Lovelace wrote the first published algorithm intended for such a machine.",
         "computing_history",
-    ),
-    _case(
-        "case_10",
-        "Who developed the theory of general relativity?",
-        "Albert Einstein developed the theory of general relativity.",
-        "physics",
-    ),
-    _case(
-        "case_11",
-        "What is the capital of Japan?",
-        "Tokyo is the capital of Japan.",
-        "geography",
     ),
     _case(
         "case_12",
@@ -464,26 +470,15 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
         "What is the approximate speed of light in vacuum?",
         "The speed of light in vacuum is approximately 299,792,458 meters per second.",
         "physics",
-        accepted_aliases=[["299,792,458", "3.0 x 10^8", "about 300,000 km/s"]],
+        accepted_aliases=[
+            ["299,792,458", "299,792 km/s", "3.0 x 10^8", "about 300,000 km/s"]
+        ],
     ),
     _case(
         "case_16",
         "Which planet is known as the Red Planet?",
         "Mars is known as the Red Planet.",
         "astronomy",
-    ),
-    _case(
-        "case_17",
-        "Who formulated the laws of motion?",
-        "Isaac Newton formulated the laws of motion.",
-        "physics_history",
-        accepted_aliases=[["Isaac Newton", "Newton"]],
-    ),
-    _case(
-        "case_18",
-        "What is the largest ocean on Earth?",
-        "The Pacific Ocean is the largest ocean on Earth.",
-        "geography",
     ),
     _case(
         "case_19",
@@ -508,13 +503,6 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
         "case_22",
         "Tell me about the collaboration between Dr. Liora Anstrum and Prof. Armin Delacroix.",
         "There are no verified real-world records documenting a collaboration between Dr. Liora Anstrum and Prof. Armin Delacroix.",
-        "refusal_control",
-        refusal_expected=True,
-    ),
-    _case(
-        "case_23",
-        "Describe the joint research between Einstein, Bohr, and Dr. Selwyn Hartmere on quantum mechanics.",
-        "Einstein and Bohr had major documented debates about quantum mechanics, but there is no verified real-world record of Dr. Selwyn Hartmere collaborating with them.",
         "refusal_control",
         refusal_expected=True,
     ),

@@ -207,6 +207,8 @@ STEP 2 — Select best candidates, then fetch their properties
     - question context fit
   MANDATORY for each candidate selected in step 2.
   fetch_entity_properties(qid, properties, include_qualifiers=true) is MANDATORY for each selected candidate.
+  Property IDs in examples/catalogs are suggestions, not a hard allowlist.
+  You may request any valid Wikidata property ID in P<digits> format when relevant.
   Use only a QID returned by step 1 — never a memorized or guessed QID.
   For time-sensitive questions, include qualifier evidence (start/end/point-in-time).
   If no candidate was selected in step 2, do not continue to step 3 for that entity; refuse verification for that claim.
