@@ -6,7 +6,7 @@ import os
 from typing import Any
 
 from .config import NLI_MODEL, TEMPERATURE
-from .utils import safe_json_extract
+from .utils import normalize_text, safe_json_extract
 
 try:
     import torch
@@ -26,6 +26,7 @@ from kb_project.settings import OPENAI_JUDGE_MODEL
 
 _TOKENIZER: Any = None
 _MODEL: Any = None
+_NLI_CACHE: dict[tuple[str, str], dict[str, Any]] = {}
 
 
 def _load_local_nli() -> tuple[Any, Any]:
@@ -126,12 +127,19 @@ No extra text.
 
 def evaluate_bidirectional_entailment(ground_truth: str, rag_output: str) -> dict[str, Any]:
     """Evaluate entailment in both directions, local model first."""
+    normalized_ground_truth = normalize_text(ground_truth)
+    normalized_rag_output = normalize_text(rag_output)
+    cache_key = (normalized_ground_truth, normalized_rag_output)
+    cached = _NLI_CACHE.get(cache_key)
+    if cached is not None:
+        return dict(cached)
+
     try:
-        forward = _run_local_pair(ground_truth, rag_output)
-        backward = _run_local_pair(rag_output, ground_truth)
+        forward = _run_local_pair(normalized_ground_truth, normalized_rag_output)
+        backward = _run_local_pair(normalized_rag_output, normalized_ground_truth)
         forward_entails = _is_entailment(forward["label"])
         backward_entails = _is_entailment(backward["label"])
-        return {
+        result = {
             "entailment_forward": forward_entails,
             "entailment_backward": backward_entails,
             "confidence": max(0.0, min(1.0, (forward["confidence"] + backward["confidence"]) / 2.0)),
@@ -142,21 +150,25 @@ def evaluate_bidirectional_entailment(ground_truth: str, rag_output: str) -> dic
                 "backward": backward["label"],
             },
         }
+        _NLI_CACHE[cache_key] = dict(result)
+        return result
     except Exception as local_exc:
         local_error = str(local_exc)
 
     try:
-        result = _run_openai_nli(ground_truth, rag_output)
+        result = _run_openai_nli(normalized_ground_truth, normalized_rag_output)
         result["error"] = ""
+        _NLI_CACHE[cache_key] = dict(result)
         return result
     except Exception as openai_exc:
         openai_error = str(openai_exc)
 
-    return {
+    result = {
         "entailment_forward": False,
         "entailment_backward": False,
         "confidence": 0.0,
         "backend": "none",
         "error": f"local_nli_error={local_error}; openai_nli_error={openai_error}",
     }
-
+    _NLI_CACHE[cache_key] = dict(result)
+    return result

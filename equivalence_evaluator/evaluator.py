@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Optional
 
-from .config import SIMILARITY_THRESHOLD
+from .config import NLI_CONFIDENCE_THRESHOLD, SIMILARITY_THRESHOLD
 from .nli import evaluate_bidirectional_entailment
 from .similarity import cosine_similarity_with_details
 from .triples import compare_triples
@@ -64,39 +64,50 @@ class EquivalenceEvaluator:
         # Step 2 — semantic similarity
         sim = cosine_similarity_with_details(gt, rag)
         sim_score = float(sim.get("score", 0.0) or 0.0)
-        sim_pass = sim_score > SIMILARITY_THRESHOLD
+        sim_pass = sim_score >= SIMILARITY_THRESHOLD
         self._log(
             f"[Equivalence] Step2 similarity score: {sim_score:.4f} "
-            f"(threshold>{SIMILARITY_THRESHOLD:.2f}) -> {'PASS' if sim_pass else 'FAIL'}"
+            f"(threshold>={SIMILARITY_THRESHOLD:.2f}) -> {'PASS' if sim_pass else 'FAIL'}"
         )
         if sim_pass:
             return {
                 "equivalent": True,
                 "method": "semantic_similarity",
-                "score": sim_score,
+                "score": 1.0,
                 "details": {
                     **base_details,
                     "provider": sim.get("provider", ""),
                     "model": sim.get("model", ""),
+                    "raw_similarity_score": sim_score,
                     "threshold": SIMILARITY_THRESHOLD,
                 },
             }
 
         # Step 3 — bidirectional entailment
         nli = evaluate_bidirectional_entailment(gt, rag)
-        nli_pass = bool(nli.get("entailment_forward")) and bool(
-            nli.get("entailment_backward")
+        nli_confidence = float(nli.get("confidence", 0.0) or 0.0)
+        nli_pass = (
+            bool(nli.get("entailment_forward"))
+            and bool(nli.get("entailment_backward"))
+            and nli_confidence >= NLI_CONFIDENCE_THRESHOLD
         )
         self._log(
             f"[Equivalence] Step3 NLI -> {'PASS' if nli_pass else 'FAIL'} "
-            f"(backend={nli.get('backend', 'unknown')})"
+            f"(backend={nli.get('backend', 'unknown')}, "
+            f"confidence={nli_confidence:.4f}, "
+            f"threshold>={NLI_CONFIDENCE_THRESHOLD:.2f})"
         )
         if nli_pass:
             return {
                 "equivalent": True,
                 "method": "nli",
-                "score": float(nli.get("confidence", 0.0) or 0.0),
-                "details": {**base_details, **nli},
+                "score": 1.0,
+                "details": {
+                    **base_details,
+                    **nli,
+                    "raw_nli_confidence": nli_confidence,
+                    "confidence_threshold": NLI_CONFIDENCE_THRESHOLD,
+                },
             }
 
         # Step 4 — triple overlap
@@ -143,4 +154,3 @@ class EquivalenceEvaluator:
 def is_equivalence_method(method: str) -> bool:
     """Return whether method indicates pre-judge equivalence pass."""
     return (method or "").strip() in _EQUIVALENCE_METHODS
-

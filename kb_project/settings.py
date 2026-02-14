@@ -15,6 +15,8 @@ except ImportError:
     # Keep working if python-dotenv is not installed.
     pass
 
+from .utils.langsmith import normalize_trace_mode
+
 # ==========================================================================
 # LLM Configuration (shared across agents)
 # ==========================================================================
@@ -42,6 +44,7 @@ OPENAI_JUDGE_MODEL = _env("OPENAI_JUDGE_MODEL", "gpt-4o")
 VECTARA_DEVICE = _env("VECTARA_DEVICE", "auto").lower()
 AIMON_DEVICE = _env("AIMON_DEVICE", "auto").lower()
 RAG_RECURSION_LIMIT = _env_int("RAG_RECURSION_LIMIT", 40, minimum=1)
+LANGSMITH_TRACE_MODE = normalize_trace_mode(_env("LANGSMITH_TRACE_MODE", "rag"))
 
 # Backward-compatible alias used across the codebase.
 LLM_MODEL = WIKIDATA_RAG_MODEL

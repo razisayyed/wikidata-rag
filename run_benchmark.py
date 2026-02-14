@@ -32,6 +32,16 @@ def main() -> None:
         default=None,
         help="Optional cap on number of benchmark cases.",
     )
+    parser.add_argument(
+        "--trace-mode",
+        type=str,
+        choices=["rag", "rag_baseline", "all"],
+        default=None,
+        help=(
+            "LangSmith trace scope: rag (default via env), "
+            "rag_baseline, or all."
+        ),
+    )
     args = parser.parse_args()
 
     test_cases = GROUND_TRUTH_TEST_CASES
@@ -46,6 +56,7 @@ def main() -> None:
         test_cases=test_cases,
         threshold=args.threshold,
         temperature=args.temperature,
+        trace_mode=args.trace_mode,
         verbose=True,
     )
 

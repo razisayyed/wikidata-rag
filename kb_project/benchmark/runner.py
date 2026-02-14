@@ -11,7 +11,8 @@ from equivalence_evaluator.evaluator import EquivalenceEvaluator, is_equivalence
 from equivalence_evaluator.utils import factual_judge_adapter
 
 from ..prompt_only_llm import answer_question_prompt_only, build_prompt_only_agent
-from ..settings import OPENAI_JUDGE_MODEL, RAGTRUTH_MODEL
+from ..settings import LANGSMITH_TRACE_MODE, OPENAI_JUDGE_MODEL, RAGTRUTH_MODEL
+from ..utils.langsmith import langsmith_tracing, normalize_trace_mode, should_trace_component
 from ..wikidata_rag_agent import build_agent
 from .aimon import AimonEvaluator
 from .llm_judge import judge_responses
@@ -31,6 +32,107 @@ from .ragtruth import RAGTruthEvaluator
 from .vectra import GROUND_TRUTH_TEST_CASES, run_agent_with_capture
 
 EVALUATOR_ORDER = ["vectara", "aimon", "llm_judge", "ragtruth"]
+_REFUSAL_MARKERS = (
+    "i cannot verify",
+    "i can't verify",
+    "cannot be verified",
+    "could not be verified",
+    "i cannot determine",
+    "cannot determine",
+    "i don't know",
+    "i do not know",
+    "unknown",
+    "no verified",
+)
+_REFUSAL_EXPECTED_HINTS = (
+    "fictional",
+    "does not exist",
+    "not a real",
+    "no verified",
+    "cannot verify",
+    "cannot be established",
+    "no real-world record",
+    "no reliable record",
+)
+
+
+def _is_refusal_response(text: str) -> bool:
+    lowered = (text or "").strip().lower()
+    return any(marker in lowered for marker in _REFUSAL_MARKERS)
+
+
+def _is_refusal_expected_case(test_case: TestCase) -> bool:
+    if bool(getattr(test_case, "refusal_expected", False)):
+        return True
+    context = " ".join([test_case.question or "", test_case.ground_truth or ""]).lower()
+    return any(hint in context for hint in _REFUSAL_EXPECTED_HINTS)
+
+
+def _resolve_winner_for_evaluator(result: EvaluatorResult) -> str:
+    if result.name == "aimon":
+        return winner_from_labels(
+            rag_label=result.rag_label,
+            baseline_label=result.baseline_label,
+            rag_score=result.rag_score,
+            baseline_score=result.baseline_score,
+            lower_is_better=True,
+            epsilon=AIMON_WINNER_EPSILON,
+        )
+    if result.name == "ragtruth":
+        return winner_from_labels(
+            rag_label=result.rag_label,
+            baseline_label=result.baseline_label,
+            rag_score=result.rag_score,
+            baseline_score=result.baseline_score,
+            lower_is_better=True,
+        )
+    if result.name == "vectara":
+        return winner_from_labels(
+            rag_label=result.rag_label,
+            baseline_label=result.baseline_label,
+            rag_score=result.rag_score,
+            baseline_score=result.baseline_score,
+            lower_is_better=False,
+        )
+    return winner_from_labels(
+        rag_label=result.rag_label,
+        baseline_label=result.baseline_label,
+    )
+
+
+def _apply_refusal_policy(
+    result: EvaluatorResult,
+    test_case: TestCase,
+    rag_response: str,
+    baseline_response: str,
+) -> EvaluatorResult:
+    if result.status != "completed":
+        return result
+
+    refusal_expected = _is_refusal_expected_case(test_case)
+    rag_is_refusal = _is_refusal_response(rag_response)
+    baseline_is_refusal = _is_refusal_response(baseline_response)
+    policy_notes: List[str] = []
+
+    if rag_is_refusal:
+        new_rag_label = "factual" if refusal_expected else "hallucinated"
+        if result.rag_label != new_rag_label:
+            result.rag_label = new_rag_label
+            policy_notes.append(f"RAG refusal relabeled as {new_rag_label}")
+
+    if baseline_is_refusal:
+        new_baseline_label = "factual" if refusal_expected else "hallucinated"
+        if result.baseline_label != new_baseline_label:
+            result.baseline_label = new_baseline_label
+            policy_notes.append(f"BASELINE refusal relabeled as {new_baseline_label}")
+
+    if policy_notes:
+        result.winner = _resolve_winner_for_evaluator(result)
+        prefix = f"Refusal policy (refusal_expected={refusal_expected}). "
+        suffix = "; ".join(policy_notes)
+        result.notes = f"{result.notes} | {prefix}{suffix}" if result.notes else f"{prefix}{suffix}"
+
+    return result
 
 
 def build_reference_ground_truth(test_case: TestCase, include_aliases: bool = False) -> str:
@@ -114,6 +216,40 @@ def _evaluate_vectara(
 
         rag_method = str(rag_equiv.get("method", ""))
         baseline_method = str(baseline_equiv.get("method", ""))
+        original_rag_method = rag_method
+        original_baseline_method = baseline_method
+        forced_fair_method = False
+
+        # Fairness guardrail: if methods differ, force both outputs through
+        # the same final method so winner comparison stays apples-to-apples.
+        if rag_method != baseline_method:
+            forced_fair_method = True
+            rag_forced = factual_judge_adapter(reference_ground_truth, rag_output.response)
+            baseline_forced = factual_judge_adapter(
+                reference_ground_truth, baseline_output.response
+            )
+
+            rag_equiv = {
+                "equivalent": bool(rag_forced.get("equivalent", False)),
+                "method": "factual_judge",
+                "score": float(rag_forced.get("score", 0.0) or 0.0),
+                "details": {
+                    "forced_for_fair_comparison": True,
+                    "original_method": rag_method,
+                },
+            }
+            baseline_equiv = {
+                "equivalent": bool(baseline_forced.get("equivalent", False)),
+                "method": "factual_judge",
+                "score": float(baseline_forced.get("score", 0.0) or 0.0),
+                "details": {
+                    "forced_for_fair_comparison": True,
+                    "original_method": baseline_method,
+                },
+            }
+            rag_method = "factual_judge"
+            baseline_method = "factual_judge"
+
         rag_score = float(rag_equiv.get("score", 0.0) or 0.0)
         baseline_score = float(baseline_equiv.get("score", 0.0) or 0.0)
 
@@ -129,10 +265,15 @@ def _evaluate_vectara(
         else:
             baseline_label = "factual" if is_equivalence_method(baseline_method) else "hallucinated"
 
-        notes = (
-            "Equivalence pipeline. "
-            f"RAG method={rag_method}; BASELINE method={baseline_method}"
-        )
+        notes = "Equivalence pipeline. "
+        if forced_fair_method:
+            notes += (
+                "Mixed methods detected; forced common method=factual_judge. "
+                f"Original RAG method={original_rag_method}; "
+                f"Original BASELINE method={original_baseline_method}"
+            )
+        else:
+            notes += f"RAG method={rag_method}; BASELINE method={baseline_method}"
         return EvaluatorResult(
             name="vectara",
             status="completed",
@@ -444,13 +585,16 @@ def run_comparison_suite(
     test_cases: Optional[List[TestCase]] = None,
     threshold: float = 0.5,
     temperature: float = 0.0,
+    trace_mode: Optional[str] = None,
     verbose: bool = True,
 ) -> SuiteResult:
     """Run benchmark suite in legacy-simple mode."""
+    resolved_trace_mode = normalize_trace_mode(trace_mode or LANGSMITH_TRACE_MODE)
     cases_to_run = test_cases or GROUND_TRUTH_TEST_CASES
 
     if verbose:
         print("Loading benchmark runtime...")
+        print(f"LangSmith trace mode: {resolved_trace_mode}")
 
     equivalence_evaluator = EquivalenceEvaluator(
         factual_judge_callable=factual_judge_adapter,
@@ -484,11 +628,14 @@ def run_comparison_suite(
         baseline_error = ""
 
         try:
-            rag_run = run_agent_with_capture(
-                question=test_case.question,
-                agent=rag_agent,
-                verbose=False,
-            )
+            with langsmith_tracing(
+                should_trace_component(resolved_trace_mode, "rag")
+            ):
+                rag_run = run_agent_with_capture(
+                    question=test_case.question,
+                    agent=rag_agent,
+                    verbose=False,
+                )
             rag_output = _to_model_output(
                 response=rag_run.final_answer,
                 retrieved_context=rag_run.retrieved_context,
@@ -499,11 +646,14 @@ def run_comparison_suite(
             rag_output = _to_model_output(response=f"Error: {exc}")
 
         try:
-            baseline_response = answer_question_prompt_only(
-                test_case.question,
-                llm=baseline_agent,
-                verbose=False,
-            )
+            with langsmith_tracing(
+                should_trace_component(resolved_trace_mode, "baseline")
+            ):
+                baseline_response = answer_question_prompt_only(
+                    test_case.question,
+                    llm=baseline_agent,
+                    verbose=False,
+                )
             baseline_output = _to_model_output(response=baseline_response)
         except Exception as exc:
             baseline_error = str(exc)
@@ -517,36 +667,46 @@ def run_comparison_suite(
                 for evaluator in EVALUATOR_ORDER
             }
         else:
-            evals = {
-                "vectara": _evaluate_vectara(
-                    rag_output=rag_output,
-                    baseline_output=baseline_output,
-                    reference_ground_truth=reference_ground_truth,
-                    threshold=threshold,
-                    hallucination_model=None,
-                    equivalence_evaluator=equivalence_evaluator,
-                ),
-                "aimon": _evaluate_aimon(
-                    rag_output=rag_output,
-                    baseline_output=baseline_output,
+            with langsmith_tracing(
+                should_trace_component(resolved_trace_mode, "evaluator")
+            ):
+                evals = {
+                    "vectara": _evaluate_vectara(
+                        rag_output=rag_output,
+                        baseline_output=baseline_output,
+                        reference_ground_truth=reference_ground_truth,
+                        threshold=threshold,
+                        hallucination_model=None,
+                        equivalence_evaluator=equivalence_evaluator,
+                    ),
+                    "aimon": _evaluate_aimon(
+                        rag_output=rag_output,
+                        baseline_output=baseline_output,
+                        test_case=test_case,
+                        reference_ground_truth=reference_ground_truth,
+                        aimon_evaluator=aimon_evaluator,
+                    ),
+                    "llm_judge": _evaluate_llm_judge(
+                        rag_output=rag_output,
+                        baseline_output=baseline_output,
+                        test_case=test_case,
+                        reference_ground_truth=reference_ground_truth,
+                    ),
+                    "ragtruth": _evaluate_ragtruth(
+                        rag_output=rag_output,
+                        baseline_output=baseline_output,
+                        test_case=test_case,
+                        reference_ground_truth=reference_ground_truth,
+                        ragtruth_evaluator=ragtruth_evaluator,
+                    ),
+                }
+            for evaluator_name, evaluator_result in list(evals.items()):
+                evals[evaluator_name] = _apply_refusal_policy(
+                    result=evaluator_result,
                     test_case=test_case,
-                    reference_ground_truth=reference_ground_truth,
-                    aimon_evaluator=aimon_evaluator,
-                ),
-                "llm_judge": _evaluate_llm_judge(
-                    rag_output=rag_output,
-                    baseline_output=baseline_output,
-                    test_case=test_case,
-                    reference_ground_truth=reference_ground_truth,
-                ),
-                "ragtruth": _evaluate_ragtruth(
-                    rag_output=rag_output,
-                    baseline_output=baseline_output,
-                    test_case=test_case,
-                    reference_ground_truth=reference_ground_truth,
-                    ragtruth_evaluator=ragtruth_evaluator,
-                ),
-            }
+                    rag_response=rag_output.response,
+                    baseline_response=baseline_output.response,
+                )
 
         case_result = CaseResult(
             test_case=test_case,

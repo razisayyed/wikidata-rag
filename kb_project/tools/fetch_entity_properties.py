@@ -27,7 +27,16 @@ _PROPERTY_ID_PATTERN = re.compile(r"^P\d+$")
 _INTENT_PROPERTY_RULES: List[tuple[tuple[str, ...], tuple[str, ...]]] = [
     (("discover", "discovered", "discoverer", "invent", "invented", "inventor"), ("P61", "P575")),
     (("born", "birth", "date of birth"), ("P569",)),
+    (("born in", "birthplace", "place of birth"), ("P19", "P131", "P17")),
     (("died", "death", "date of death"), ("P570",)),
+    (("citizenship", "nationality"), ("P27",)),
+    (("founder", "founded by"), ("P112", "P571")),
+    (("head of state",), ("P35", "P1906")),
+    (("head of government",), ("P6", "P1313")),
+    (("ceo", "chief executive officer"), ("P169", "P488")),
+    (("continent",), ("P30",)),
+    (("country",), ("P17", "P131")),
+    (("award", "medal", "order", "knight", "honor"), ("P166", "P1027", "P17", "P495")),
     (
         ("major achievements", "achievements", "accomplishments", "contribution", "contributions", "known for"),
         ("P101", "P800", "P166", "P39", "P108", "P61"),

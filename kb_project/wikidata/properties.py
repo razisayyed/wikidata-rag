@@ -52,6 +52,7 @@ WIKIDATA_PROPERTIES: Dict[str, str] = {
     "P802": "student (taught by this person)",
     "P463": "member of (organization/society/international org)",
     "P39": "position held",
+    "P1027": "conferred by (awarding authority)",
     "P1830": "owner of",
     # === SCIENTIST SPECIFIC ===
     "P737": "influenced by",
@@ -105,6 +106,7 @@ WIKIDATA_PROPERTIES: Dict[str, str] = {
     "P1351": "number of points/goals/set scored",
     # === ORGANIZATION ===
     "P571": "inception date (when founded)",
+    "P740": "location of formation",
     "P576": "dissolved date",
     "P112": "founded by",
     "P1056": "product or material produced",
@@ -163,6 +165,7 @@ WIKIDATA_PROPERTIES: Dict[str, str] = {
     "P1151": "topic's main Wikimedia portal",
     # === COUNTRY/STATE SPECIFIC ===
     "P122": "basic form of government",
+    "P1001": "applies to jurisdiction",
     "P85": "anthem",
     "P163": "flag",
     "P94": "coat of arms",
@@ -184,6 +187,7 @@ WIKIDATA_PROPERTIES: Dict[str, str] = {
     "P175": "performer",
     "P577": "publication date",
     "P123": "publisher",
+    "P291": "place of publication",
     "P136": "genre",
     "P495": "country of origin",
     "P364": "original language of film/TV",
