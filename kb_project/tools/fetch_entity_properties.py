@@ -23,6 +23,7 @@ from ..wikidata.sparql import run_sparql as _run_sparql
 
 logger = configure_logging()
 _PROPERTY_ID_PATTERN = re.compile(r"^P\d+$")
+_VALUE_QID_PATTERN = re.compile(r"\[(Q\d+)\]")
 
 _INTENT_PROPERTY_RULES: List[tuple[tuple[str, ...], tuple[str, ...]]] = [
     (("discover", "discovered", "discoverer", "invent", "invented", "inventor"), ("P61", "P575")),
@@ -30,10 +31,26 @@ _INTENT_PROPERTY_RULES: List[tuple[tuple[str, ...], tuple[str, ...]]] = [
     (("born in", "birthplace", "place of birth"), ("P19", "P131", "P17")),
     (("died", "death", "date of death"), ("P570",)),
     (("citizenship", "nationality"), ("P27",)),
+    (
+        (
+            "author's country",
+            "authors country",
+            "author country",
+            "author's citizenship",
+            "author citizenship",
+            "author of",
+            "country of the author",
+        ),
+        ("P27", "P17", "P495"),
+    ),
     (("founder", "founded by"), ("P112", "P571")),
     (("head of state",), ("P35", "P1906")),
     (("head of government",), ("P6", "P1313")),
     (("ceo", "chief executive officer"), ("P169", "P488")),
+    (
+        ("when", "year", "date", "during", "at the time", "currently", "current", "former", "historical"),
+        ("P580", "P582", "P585", "P1319", "P1326", "P2031", "P2032", "P2669"),
+    ),
     (("continent",), ("P30",)),
     (("country",), ("P17", "P131")),
     (("award", "medal", "order", "knight", "honor"), ("P166", "P1027", "P17", "P495")),
@@ -78,6 +95,15 @@ def _extract_year(value: str) -> Optional[int]:
         return int(match.group(1))
     except ValueError:
         return None
+
+
+def _entry_sort_key(entry: Dict[str, Any]) -> tuple[int, int]:
+    qualifiers = entry.get("qualifiers", {}) or {}
+    end_year = _extract_year(str(qualifiers.get("P582", "")))
+    start_year = _extract_year(str(qualifiers.get("P580", "")))
+    current_flag = 1 if end_year is None else 0
+    recency = start_year if start_year is not None else -1
+    return (current_flag, recency)
 
 
 def _normalize_temporal_alias(
@@ -125,6 +151,17 @@ def _normalize_temporal_alias(
     return normalized, note
 
 
+def _qid_from_entity_value(value: str) -> str:
+    raw = (value or "").strip()
+    if raw.lower().startswith("http://www.wikidata.org/entity/q") or raw.lower().startswith(
+        "https://www.wikidata.org/entity/q"
+    ):
+        qid = raw.rsplit("/", 1)[-1].upper()
+        if qid.startswith("Q") and qid[1:].isdigit():
+            return qid
+    return ""
+
+
 def _augment_properties_for_question(
     properties: List[str],
     question: str,
@@ -165,7 +202,10 @@ def _augment_properties_for_question(
     return merged, auto_added
 
 
-def _extract_qids_from_bindings(bindings: List[Dict[str, Any]]) -> List[str]:
+def _extract_qids_from_bindings(
+    bindings: List[Dict[str, Any]],
+    source_properties: List[str],
+) -> List[str]:
     """
     Extract Wikidata entity QIDs from raw SPARQL binding values.
 
@@ -173,8 +213,17 @@ def _extract_qids_from_bindings(bindings: List[Dict[str, Any]]) -> List[str]:
     during an earlier fetch_entity_properties call.
     """
     found: set[str] = set()
+    # Follow-up fetches should come from relation-valued properties, not
+    # ontology/type guardrails (P31/P279), which often cause class drift.
+    allowed_value_keys = {
+        f"{prop.lower()}Value"
+        for prop in source_properties
+        if prop not in {"P31", "P279"}
+    }
     for row in bindings:
-        for binding in row.values():
+        for key, binding in row.items():
+            if key not in allowed_value_keys:
+                continue
             if not isinstance(binding, dict):
                 continue
             value = str(binding.get("value", "")).strip()
@@ -190,6 +239,22 @@ def _extract_qids_from_bindings(bindings: List[Dict[str, Any]]) -> List[str]:
                 continue
             if qid.startswith("Q") and qid[1:].isdigit():
                 found.add(qid)
+    return sorted(found)
+
+
+def _extract_qids_from_property_bindings(bindings: List[Dict[str, Any]]) -> List[str]:
+    """Extract QIDs from per-property query bindings."""
+    found: set[str] = set()
+    for row in bindings:
+        value_binding = row.get("value")
+        if not isinstance(value_binding, dict):
+            continue
+        value = str(value_binding.get("value", "")).strip()
+        if not value:
+            continue
+        qid = _qid_from_entity_value(value)
+        if qid:
+            found.add(qid)
     return sorted(found)
 
 
@@ -290,30 +355,39 @@ def fetch_entity_properties(
     if not valid_props:
         return "Error: No valid properties specified."
 
-    query = build_dynamic_sparql_query(
-        qid=qid,
-        property_ids=valid_props,
-        include_qualifiers=include_qualifiers,
-    )
-
-    if not query:
-        return f"Error: Could not build query for {qid}"
-
     try:
-        result = _run_sparql(query)
-        bindings = result.get("results", {}).get("bindings", [])
+        property_bindings: Dict[str, List[Dict[str, Any]]] = {}
+        any_data = False
+        inferred_qids_all: set[str] = set()
 
-        if not bindings:
+        for prop in valid_props:
+            query = build_property_sparql_query(
+                qid=qid,
+                prop=prop,
+                include_qualifiers=include_qualifiers,
+            )
+            result = _run_sparql(query)
+            bindings = result.get("results", {}).get("bindings", [])
+            property_bindings[prop] = bindings
+            if bindings:
+                any_data = True
+
+            if prop not in {"P31", "P279"}:
+                inferred = _extract_qids_from_property_bindings(bindings)
+                for q in inferred:
+                    inferred_qids_all.add(q)
+
+        if not any_data:
             return f"Error: Entity {qid} not found or has no data for requested properties."
 
-        inferred_qids = _extract_qids_from_bindings(bindings)
-        newly_authorized_qids = register_inferred_qids(inferred_qids)
+        newly_authorized_qids = register_inferred_qids(sorted(inferred_qids_all))
 
         formatted_results, wikipedia_url = format_property_results(
-            bindings=bindings,
+            property_bindings=property_bindings,
             valid_props=valid_props,
             qid=qid,
             include_qualifiers=include_qualifiers,
+            question=get_question_context(),
         )
         if newly_authorized_qids:
             formatted_results = (
@@ -348,55 +422,21 @@ def fetch_entity_properties(
         return f"Error fetching properties for {qid}: {e}"
 
 
-def build_dynamic_sparql_query(
+def build_property_sparql_query(
     qid: str,
-    property_ids: List[str],
+    prop: str,
     include_qualifiers: bool = True,
 ) -> str:
-    """Build a statement-level SPARQL query for the requested properties."""
-
-    valid_props = []
-    seen_props = set()
-    for raw_prop in property_ids:
-        prop_id = _normalize_property_id(raw_prop)
-        if prop_id and prop_id not in seen_props:
-            seen_props.add(prop_id)
-            valid_props.append(prop_id)
-
-    if not valid_props:
-        return ""
-
-    select_vars = ["?itemLabel", "?itemDescription", "?wikipediaUrl"]
-    optional_clauses = []
-
-    for prop in valid_props:
-        var = prop.lower()
-        statement_var = f"?{var}Statement"
-        value_var = f"?{var}Value"
-        value_label_var = f"?{var}ValueLabel"
-
-        select_vars.append(value_var)
-        select_vars.append(value_label_var)
-
-        qualifier_selects: List[str] = []
-        qualifier_optionals: List[str] = []
-        if include_qualifiers:
-            for qualifier_prop in ("P580", "P582", "P585"):
-                qualifier_var = f"?{var}{qualifier_prop}"
-                qualifier_selects.append(qualifier_var)
-                qualifier_optionals.append(
-                    f"    OPTIONAL {{ {statement_var} pq:{qualifier_prop} {qualifier_var} . }}"
-                )
-        select_vars.extend(qualifier_selects)
-
-        clause = [
-            "  OPTIONAL {",
-            f"    ?item p:{prop} {statement_var} .",
-            f"    {statement_var} ps:{prop} {value_var} .",
-            *qualifier_optionals,
-            "  }",
-        ]
-        optional_clauses.append("\n".join(clause))
+    """Build a statement-level SPARQL query for a single property."""
+    qualifier_selects: List[str] = []
+    qualifier_optionals: List[str] = []
+    if include_qualifiers:
+        for qualifier_prop in ("P580", "P582", "P585"):
+            qualifier_var = f"?{qualifier_prop.lower()}"
+            qualifier_selects.append(qualifier_var)
+            qualifier_optionals.append(
+                f"  OPTIONAL {{ ?statement pq:{qualifier_prop} {qualifier_var} . }}"
+            )
 
     query = f"""PREFIX wd: <http://www.wikidata.org/entity/>
 PREFIX p: <http://www.wikidata.org/prop/>
@@ -406,10 +446,14 @@ PREFIX schema: <http://schema.org/>
 PREFIX wikibase: <http://wikiba.se/ontology#>
 PREFIX bd: <http://www.bigdata.com/rdf#>
 
-SELECT {' '.join(select_vars)} WHERE {{
+SELECT ?itemLabel ?itemDescription ?wikipediaUrl ?value ?valueLabel {' '.join(qualifier_selects)} WHERE {{
   BIND(wd:{qid} AS ?item)
 
-{chr(10).join(optional_clauses)}
+  OPTIONAL {{
+    ?item p:{prop} ?statement .
+    ?statement ps:{prop} ?value .
+{chr(10).join(qualifier_optionals)}
+  }}
 
   OPTIONAL {{
     ?wikipediaUrl schema:about ?item ;
@@ -420,20 +464,20 @@ SELECT {' '.join(select_vars)} WHERE {{
     bd:serviceParam wikibase:language "en".
   }}
 }}
-LIMIT 200"""
+LIMIT 500"""
 
     return query
 
 
 def format_property_results(
-    bindings: List[Dict[str, Any]],
+    property_bindings: Dict[str, List[Dict[str, Any]]],
     valid_props: List[str],
     qid: str = "",
     include_qualifiers: bool = True,
+    question: str = "",
 ) -> tuple[str, Optional[str]]:
     """Format SPARQL results into a readable string."""
-
-    if not bindings:
+    if not property_bindings:
         return "No data found.", None
 
     collected: Dict[str, List[Dict[str, Any]]] = {p: [] for p in valid_props}
@@ -444,27 +488,28 @@ def format_property_results(
     entity_desc = None
     wikipedia_url = None
 
-    for b in bindings:
-        if not entity_label:
-            entity_label = b.get("itemLabel", {}).get("value")
-        if not entity_desc:
-            entity_desc = b.get("itemDescription", {}).get("value")
-        if not wikipedia_url:
-            wikipedia_url = b.get("wikipediaUrl", {}).get("value")
+    for prop in valid_props:
+        bindings = property_bindings.get(prop, [])
+        for b in bindings:
+            if not entity_label:
+                entity_label = b.get("itemLabel", {}).get("value")
+            if not entity_desc:
+                entity_desc = b.get("itemDescription", {}).get("value")
+            if not wikipedia_url:
+                wikipedia_url = b.get("wikipediaUrl", {}).get("value")
 
-        for prop in valid_props:
-            var = prop.lower()
-            value = (
-                b.get(f"{var}ValueLabel", {}).get("value")
-                or b.get(f"{var}Value", {}).get("value")
-            )
+            raw_value = b.get("value", {}).get("value", "")
+            value = b.get("valueLabel", {}).get("value") or raw_value
             if not value:
                 continue
             value = _format_time_value(value)
+            linked_qid = _qid_from_entity_value(raw_value)
+            if linked_qid:
+                value = f"{value} [{linked_qid}]"
 
-            start_time = b.get(f"{var}P580", {}).get("value", "")
-            end_time = b.get(f"{var}P582", {}).get("value", "")
-            point_in_time = b.get(f"{var}P585", {}).get("value", "")
+            start_time = b.get("p580", {}).get("value", "")
+            end_time = b.get("p582", {}).get("value", "")
+            point_in_time = b.get("p585", {}).get("value", "")
 
             dedupe_key = (value, start_time, end_time, point_in_time)
             if dedupe_key in dedupe_keys[prop]:
@@ -510,7 +555,15 @@ def format_property_results(
             "property (not in suggestion catalog)",
         )
         label = f"{prop}: {prop_name}"
-        entries = collected[prop][:5]
+        all_entries = list(collected[prop])
+        entries = list(all_entries)
+        if prop in {"P35", "P6", "P39", "P169"}:
+            entries.sort(key=_entry_sort_key, reverse=True)
+            display_limit = 12
+            entries = entries[:display_limit]
+        else:
+            display_limit = 5
+            entries = entries[:display_limit]
         if entries:
             if len(entries) == 1 and not entries[0]["qualifiers"]:
                 lines.append(f"{label} — {entries[0]['value']}")
@@ -537,7 +590,41 @@ def format_property_results(
                             lines.append(f"  - {value} ({alias_note})")
                         else:
                             lines.append(f"  - {value}")
+                remaining_count = max(0, len(all_entries) - len(entries))
+                if remaining_count > 0:
+                    lines.append(f"  - +{remaining_count} more")
         else:
             lines.append(f"{label}: (not available)")
+
+    # Add deterministic next-hop guidance for multi-hop questions.
+    question_lower = (question or "").strip().lower()
+    needs_capital = "capital" in question_lower
+    needs_continent = "continent" in question_lower
+    guidance: List[str] = []
+
+    def _first_linked_qid(prop_id: str) -> str:
+        for entry in collected.get(prop_id, []):
+            match = _VALUE_QID_PATTERN.search(str(entry.get("value", "")))
+            if match:
+                return match.group(1)
+        return ""
+
+    if needs_capital and not collected.get("P36"):
+        bridge_qid = _first_linked_qid("P27") or _first_linked_qid("P17")
+        if bridge_qid:
+            guidance.append(
+                f"NEXT STEP hint: fetch_entity_properties(qid='{bridge_qid}', properties=['P36'], include_qualifiers=true)"
+            )
+
+    if needs_continent and not collected.get("P30"):
+        bridge_qid = _first_linked_qid("P27") or _first_linked_qid("P17")
+        if bridge_qid:
+            guidance.append(
+                f"NEXT STEP hint: fetch_entity_properties(qid='{bridge_qid}', properties=['P30'], include_qualifiers=true)"
+            )
+
+    if guidance:
+        lines.append("")
+        lines.extend(guidance)
 
     return "\n".join(lines), wikipedia_url

@@ -272,6 +272,13 @@ WIKIDATA_PROPERTIES: Dict[str, str] = {
     "P2094": "competition class",
     # === EVENTS ===
     "P585": "point in time (when event occurred)",
+    "P793": "significant event",
+    "P1319": "earliest date",
+    "P1326": "latest date",
+    "P1619": "date of official opening",
+    "P2031": "work period (start)",
+    "P2032": "work period (end)",
+    "P2669": "discontinued date",
     "P828": "has cause",
     "P1545": "series ordinal",
     "P1889": "different from",

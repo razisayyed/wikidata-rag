@@ -92,6 +92,125 @@ def _markdown_head_to_head(suite: SuiteResult) -> str:
     return "\n".join(lines)
 
 
+def _markdown_metric_aggregations(suite: SuiteResult) -> str:
+    lines = [
+        "## Aggregated Metrics",
+        "",
+        "### Factual vs Hallucinated",
+        "",
+        "| Evaluator | RAG Factual | RAG Hallucinated | BASELINE Factual | BASELINE Hallucinated |",
+        "|---|---:|---:|---:|---:|",
+    ]
+
+    for evaluator in EVALUATOR_ORDER:
+        row = suite.evaluator_summary.get(evaluator, {})
+        lines.append(
+            f"| {evaluator} | {row.get('rag_factual', 0)} | {row.get('rag_hallucinated', 0)} | "
+            f"{row.get('baseline_factual', 0)} | {row.get('baseline_hallucinated', 0)} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "### Completion Status",
+            "",
+            "| Evaluator | Completed | Skipped | Errors |",
+            "|---|---:|---:|---:|",
+        ]
+    )
+
+    for evaluator in EVALUATOR_ORDER:
+        row = suite.evaluator_summary.get(evaluator, {})
+        completed = (
+            row.get("rag_wins", 0)
+            + row.get("baseline_wins", 0)
+            + row.get("ties", 0)
+        )
+        lines.append(
+            f"| {evaluator} | {completed} | {row.get('skipped', 0)} | {row.get('errors', 0)} |"
+        )
+
+    return "\n".join(lines)
+
+
+def _markdown_case_type_aggregations(suite: SuiteResult) -> str:
+    categories = sorted({(case.test_case.category or "uncategorized") for case in suite.cases})
+    lines = [
+        "## Aggregated Metrics by Case Type",
+        "",
+    ]
+
+    if not categories:
+        lines.append("- None")
+        return "\n".join(lines)
+
+    for evaluator in EVALUATOR_ORDER:
+        lines.extend(
+            [
+                f"### {evaluator}",
+                "",
+                "| Case Type | Cases | RAG Wins | BASELINE Wins | Ties | RAG Factual | RAG Hallucinated | BASELINE Factual | BASELINE Hallucinated | Skipped | Errors |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+            ]
+        )
+
+        for category in categories:
+            cases_in_category = [
+                case
+                for case in suite.cases
+                if (case.test_case.category or "uncategorized") == category
+            ]
+
+            total_cases = len(cases_in_category)
+            rag_wins = 0
+            baseline_wins = 0
+            ties = 0
+            rag_factual = 0
+            rag_hallucinated = 0
+            baseline_factual = 0
+            baseline_hallucinated = 0
+            skipped = 0
+            errors = 0
+
+            for case in cases_in_category:
+                result = case.evaluations.get(evaluator)
+                if result is None:
+                    skipped += 1
+                    continue
+
+                if result.status == "completed":
+                    if result.winner == "RAG":
+                        rag_wins += 1
+                    elif result.winner == "BASELINE":
+                        baseline_wins += 1
+                    elif result.winner == "Tie":
+                        ties += 1
+
+                    if result.rag_label == "factual":
+                        rag_factual += 1
+                    elif result.rag_label == "hallucinated":
+                        rag_hallucinated += 1
+
+                    if result.baseline_label == "factual":
+                        baseline_factual += 1
+                    elif result.baseline_label == "hallucinated":
+                        baseline_hallucinated += 1
+                elif result.status == "skipped":
+                    skipped += 1
+                else:
+                    errors += 1
+
+            lines.append(
+                f"| {category} | {total_cases} | {rag_wins} | {baseline_wins} | {ties} | "
+                f"{rag_factual} | {rag_hallucinated} | {baseline_factual} | "
+                f"{baseline_hallucinated} | {skipped} | {errors} |"
+            )
+
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 def _markdown_eval_table(suite: SuiteResult, evaluator_name: str) -> str:
     lines = [
         f"## {evaluator_name} Results",
@@ -146,7 +265,13 @@ def _markdown_diagnostics(suite: SuiteResult) -> str:
 
 def generate_markdown_table(suite: SuiteResult) -> str:
     """Backward-compatible alias: returns the core markdown sections."""
-    sections = [_markdown_head_to_head(suite)]
+    sections = [
+        _markdown_head_to_head(suite),
+        "",
+        _markdown_metric_aggregations(suite),
+        "",
+        _markdown_case_type_aggregations(suite),
+    ]
     for evaluator in EVALUATOR_ORDER:
         sections.append("")
         sections.append(_markdown_eval_table(suite, evaluator))

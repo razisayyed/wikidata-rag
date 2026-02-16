@@ -1243,10 +1243,16 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
     _case(
         "multi_hop_046",
         "Name the capital city of the nation in which Galileo Galilei was born.",
-        "Galileo Galilei was born in Pisa. Pisa is in Italy. The capital of Italy is Rome.",
+        "Galileo Galilei was born in Pisa. At the time of his birth in 1564, Pisa was part of the Duchy of Florence. The capital of the Duchy of Florence was Florence.",
         "multi_hop",
         accepted_aliases=[
-            ["Rome", "The Eternal City", "Roma", "Rome, Italy", "City of Seven Hills"]
+            [
+                "Florence",
+                "Firenze",
+                "Florentia",
+                "City of Flowers",
+                "The Flowering City",
+            ]
         ],
     ),
     _case(
@@ -1452,9 +1458,22 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
     _case(
         "multi_hop_057",
         "Name the capital city of the founder's birth country for Meta.",
-        "Meta was founded by Eduardo Saverin. Eduardo Saverin was born in São Paulo. São Paulo is in Brazil. The capital of Brazil is Brasília.",
+        "Meta was founded by Mark Zuckerberg. Mark Zuckerberg was born in White Plains. White Plains is in United States. The capital of United States is Washington, D.C..",
         "multi_hop",
-        accepted_aliases=[["Brasília"]],
+        accepted_aliases=[
+            [
+                "Washington, D.C.",
+                "Washington, District of Columbia",
+                "D.C. Washington",
+                "The District",
+                "District of Columbia",
+                "City of Washington, D.C.",
+                "Washington City, D.C.",
+                "Nation's Capital (D.C.)",
+                "Federal City (D.C.)",
+                "Columbia District",
+            ]
+        ],
     ),
     _case(
         "multi_hop_058",
