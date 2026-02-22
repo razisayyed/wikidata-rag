@@ -219,6 +219,88 @@ RAGTRUTH_STRICT_PROMPT = """You are a strict fact-checker evaluating whether a r
 Your JSON output:"""
 
 
+RAGTRUTH_RETRIEVED_TRACE_PROMPT = """You are an expert fact-checker evaluating whether an answer is supported by a RAG tool trace.
+
+The source context below is NOT a single document. It is an ordered sequence of tool outputs captured during the RAG run.
+Tool outputs are formatted like:
+[Tool: tool_name]
+<tool output text>
+
+How to interpret the trace:
+- Read tool outputs in order (top to bottom).
+- Later tool outputs may depend on earlier outputs (for example, entity search -> selection -> property fetch).
+- A response claim may be supported by combining explicit facts across multiple tool outputs.
+- Allow paraphrases and simple composition across steps when the supporting facts are explicit.
+- Do NOT infer facts that are not explicitly present in the tool outputs.
+- Ignore tool boilerplate/instructions unless they affect what facts are actually supported.
+
+### Source Context (Ordered Tool Trace):
+{source_context}
+
+### Question:
+{question}
+
+### Response to Evaluate:
+{response}
+
+### Your Task:
+1. Compare EVERY factual claim in the response against the tool trace.
+2. Mark a claim as hallucination only if it is unsupported by the trace or contradicted by the trace.
+3. If support is distributed across multiple tool outputs, treat that as valid support.
+4. If the response correctly states uncertainty (e.g., "I don't know", "I cannot verify"), that is NOT a hallucination.
+
+### Output Format:
+Return JSON only in this format:
+```json
+{{
+    "has_hallucination": true/false,
+    "hallucinated_spans": [
+        {{"text": "exact hallucinated text", "reason": "why unsupported/contradicted by the tool trace"}}
+    ],
+    "analysis": "brief summary of what was supported vs unsupported"
+}}
+```
+
+Your JSON output:"""
+
+
+RAGTRUTH_RETRIEVED_TRACE_STRICT_PROMPT = """You are a strict fact-checker evaluating whether an answer is grounded in a RAG tool trace.
+
+The context below is an ordered sequence of tool outputs, not a single article. Tool outputs are formatted as:
+[Tool: tool_name]
+<tool output text>
+
+Strict trace-grounding rules:
+1. Only facts explicitly present in the tool outputs can support a claim.
+2. Support may come from combining explicit facts across multiple tool outputs in order.
+3. Paraphrase is allowed; invented facts, dates, names, numbers, or relations are hallucinations.
+4. If a claim is true in the real world but not explicit in the tool trace, treat it as hallucination.
+5. Explicit uncertainty ("I don't know", "I cannot verify") is NOT hallucination.
+6. Ignore tool boilerplate/instructions unless they change the factual content.
+
+### Ordered Tool Trace (ONLY source of support):
+{source_context}
+
+### Question:
+{question}
+
+### Response:
+{response}
+
+### Output exactly this JSON format:
+```json
+{{
+    "has_hallucination": <true or false>,
+    "hallucinated_spans": [
+        {{"text": "<exact text from response>", "reason": "<why unsupported/contradicted by tool trace>"}}
+    ],
+    "analysis": "<1-2 sentence summary>"
+}}
+```
+
+Your JSON output:"""
+
+
 # ==========================================================================
 # RAGTruth Evaluator Class
 # ==========================================================================
@@ -322,6 +404,16 @@ class RAGTruthEvaluator:
 
         return hallucinated_chars / response_len
 
+    def _select_prompt_template(self, eval_context_mode: str) -> str:
+        mode = (eval_context_mode or "ground_truth").strip().lower()
+        if mode == "retrieved_only":
+            return (
+                RAGTRUTH_RETRIEVED_TRACE_STRICT_PROMPT
+                if self.strict_mode
+                else RAGTRUTH_RETRIEVED_TRACE_PROMPT
+            )
+        return RAGTRUTH_STRICT_PROMPT if self.strict_mode else RAGTRUTH_QA_PROMPT
+
     def evaluate(
         self,
         question: str,
@@ -339,7 +431,7 @@ class RAGTruthEvaluator:
             response: The model's response to evaluate
             ground_truth: Known correct answer/facts
             retrieved_context: Additional retrieved context (e.g., from RAG)
-            eval_context_mode: "ground_truth" (default) or "combined"
+            eval_context_mode: "ground_truth" (default), "combined", or "retrieved_only"
             verbose: Print debug information
 
         Returns:
@@ -356,10 +448,8 @@ class RAGTruthEvaluator:
         if not source_context.strip():
             source_context = "(No context provided)"
 
-        # Select prompt template
-        prompt_template = (
-            RAGTRUTH_STRICT_PROMPT if self.strict_mode else RAGTRUTH_QA_PROMPT
-        )
+        # Select prompt template (specialized for retrieved tool-trace faithfulness)
+        prompt_template = self._select_prompt_template(eval_context_mode)
 
         # Format the prompt
         prompt = prompt_template.format(
@@ -372,6 +462,7 @@ class RAGTruthEvaluator:
             print("\n[RAGTruth] Evaluating response...")
             print(f"[RAGTruth] Using model: {self.model_name}")
             print(f"[RAGTruth] Strict mode: {self.strict_mode}")
+            print(f"[RAGTruth] Eval context mode: {eval_context_mode}")
 
         try:
             # Get LLM evaluation

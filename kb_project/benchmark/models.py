@@ -75,6 +75,7 @@ class SuiteResult:
     temperature: float
     cases: List[CaseResult]
     evaluator_summary: Dict[str, Dict[str, int]]
+    enabled_evaluators: List[str] = field(default_factory=list)
 
 
 # Backward-compat alias for old code paths that still refer to ComparisonResult.

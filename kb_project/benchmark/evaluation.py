@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-VALID_EVAL_CONTEXT_MODES = {"ground_truth", "combined"}
+VALID_EVAL_CONTEXT_MODES = {"ground_truth", "combined", "retrieved_only"}
 
 
 def build_primary_context(
@@ -24,6 +24,9 @@ def build_primary_context(
             "=== RETRIEVED FACTS ===\n"
             f"{retrieved_context.strip()}"
         )
+
+    if mode == "retrieved_only":
+        return (retrieved_context or "").strip()
 
     return ground_truth.strip()
 

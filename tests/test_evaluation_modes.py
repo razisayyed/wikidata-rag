@@ -38,6 +38,15 @@ def test_combined_mode_includes_retrieved_context():
     assert "France has capital Paris." in context
 
 
+def test_retrieved_only_mode_uses_only_retrieved_context():
+    context = build_primary_context(
+        ground_truth="Paris is the capital of France.",
+        retrieved_context="France has capital Paris.",
+        eval_context_mode="retrieved_only",
+    )
+    assert context == "France has capital Paris."
+
+
 def test_benchmark_defaults_remain_deterministic():
     repo_root = Path(__file__).resolve().parents[1]
     runner_source = (repo_root / "kb_project/benchmark/runner.py").read_text(

@@ -65,6 +65,15 @@ def _fake_suite() -> SuiteResult:
                 baseline_score=0.0,
                 winner="Tie",
             ),
+            "rag_retrieval_faithfulness": EvaluatorResult(
+                name="rag_retrieval_faithfulness",
+                status="completed",
+                rag_label="factual",
+                baseline_label="skipped",
+                rag_score=0.0,
+                baseline_score=None,
+                winner="N/A",
+            ),
         },
     )
 
@@ -75,6 +84,8 @@ def _fake_suite() -> SuiteResult:
         cases=[case],
         evaluator_summary={
             "vectara": {
+                "mode": "head_to_head",
+                "completed": 1,
                 "rag_wins": 0,
                 "baseline_wins": 0,
                 "ties": 1,
@@ -86,6 +97,8 @@ def _fake_suite() -> SuiteResult:
                 "errors": 0,
             },
             "aimon": {
+                "mode": "head_to_head",
+                "completed": 1,
                 "rag_wins": 0,
                 "baseline_wins": 0,
                 "ties": 1,
@@ -97,6 +110,8 @@ def _fake_suite() -> SuiteResult:
                 "errors": 0,
             },
             "llm_judge": {
+                "mode": "head_to_head",
+                "completed": 0,
                 "rag_wins": 0,
                 "baseline_wins": 0,
                 "ties": 0,
@@ -108,12 +123,27 @@ def _fake_suite() -> SuiteResult:
                 "errors": 0,
             },
             "ragtruth": {
+                "mode": "head_to_head",
+                "completed": 1,
                 "rag_wins": 0,
                 "baseline_wins": 0,
                 "ties": 1,
                 "rag_factual": 1,
                 "rag_hallucinated": 0,
                 "baseline_factual": 1,
+                "baseline_hallucinated": 0,
+                "skipped": 0,
+                "errors": 0,
+            },
+            "rag_retrieval_faithfulness": {
+                "mode": "rag_only",
+                "completed": 1,
+                "rag_wins": 0,
+                "baseline_wins": 0,
+                "ties": 0,
+                "rag_factual": 1,
+                "rag_hallucinated": 0,
+                "baseline_factual": 0,
                 "baseline_hallucinated": 0,
                 "skipped": 0,
                 "errors": 0,
@@ -148,11 +178,16 @@ def test_save_benchmark_report_uses_simple_top_level_schema(tmp_path: Path):
         "aimon",
         "llm_judge",
         "ragtruth",
+        "rag_retrieval_faithfulness",
     }
 
     report_text = md_path.read_text(encoding="utf-8")
     assert "## Head-to-Head by Evaluator" in report_text
-    assert "## vectara Results" in report_text
-    assert "## aimon Results" in report_text
-    assert "## llm_judge Results" in report_text
-    assert "## ragtruth Results" in report_text
+    assert "Ground-Truth Equivalence (`vectara`) Results" in report_text
+    assert "Ground-Truth Hallucination Severity (AIMon) (`aimon`) Results" in report_text
+    assert "LLM Judge (Ground-Truth Reference) (`llm_judge`) Results" in report_text
+    assert "Ground-Truth Grounding (RAGTruth-style) (`ragtruth`) Results" in report_text
+    assert (
+        "Retrieved-Context Faithfulness (RAG Only) (`rag_retrieval_faithfulness`) Results"
+        in report_text
+    )

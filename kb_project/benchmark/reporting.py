@@ -6,9 +6,14 @@ import json
 from datetime import datetime
 from typing import Dict, List
 
+from .evaluator_registry import (
+    ALL_EVALUATOR_ORDER,
+    EVALUATOR_DISPLAY_NAMES,
+    HEAD_TO_HEAD_EVALUATOR_ORDER,
+    RAG_ONLY_EVALUATOR_ORDER,
+    normalize_enabled_evaluators,
+)
 from .models import CaseResult, Colors, EvaluatorResult, SuiteResult
-
-EVALUATOR_ORDER = ["vectara", "aimon", "llm_judge", "ragtruth"]
 
 
 def _score_text(value):
@@ -23,8 +28,38 @@ def _escape_cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", "<br>")
 
 
+def _active_evaluators(suite: SuiteResult) -> List[str]:
+    configured = getattr(suite, "enabled_evaluators", None)
+    if configured:
+        return normalize_enabled_evaluators(configured)
+
+    summary_keys = set(getattr(suite, "evaluator_summary", {}).keys())
+    if summary_keys:
+        return [e for e in ALL_EVALUATOR_ORDER if e in summary_keys]
+
+    discovered: set[str] = set()
+    for case in getattr(suite, "cases", []) or []:
+        discovered.update(getattr(case, "evaluations", {}).keys())
+    if discovered:
+        return [e for e in ALL_EVALUATOR_ORDER if e in discovered]
+
+    return list(ALL_EVALUATOR_ORDER)
+
+
+def _active_head_to_head_evaluators(suite: SuiteResult) -> List[str]:
+    active = set(_active_evaluators(suite))
+    return [e for e in HEAD_TO_HEAD_EVALUATOR_ORDER if e in active]
+
+
+def _active_rag_only_evaluators(suite: SuiteResult) -> List[str]:
+    active = set(_active_evaluators(suite))
+    return [e for e in RAG_ONLY_EVALUATOR_ORDER if e in active]
+
+
 def _to_summary_block(summary: Dict[str, int]) -> Dict[str, object]:
     return {
+        "mode": summary.get("mode", "head_to_head"),
+        "completed": summary.get("completed", 0),
         "head_to_head": {
             "rag_wins": summary.get("rag_wins", 0),
             "baseline_wins": summary.get("baseline_wins", 0),
@@ -48,17 +83,32 @@ def generate_comparison_table(suite: SuiteResult, use_emoji: bool = True) -> str
     lines.append(f"{Colors.BOLD}HEAD-TO-HEAD RESULTS{Colors.RESET}")
     lines.append(f"{Colors.BOLD}{'=' * 72}{Colors.RESET}")
 
-    for evaluator in EVALUATOR_ORDER:
+    for evaluator in _active_head_to_head_evaluators(suite):
         row = suite.evaluator_summary.get(evaluator, {})
         rag = row.get("rag_wins", 0)
         baseline = row.get("baseline_wins", 0)
         ties = row.get("ties", 0)
         skipped = row.get("skipped", 0)
         errors = row.get("errors", 0)
+        label = EVALUATOR_DISPLAY_NAMES.get(evaluator, evaluator)
         lines.append(
-            f"{evaluator:<10} RAG={rag:<3} BASELINE={baseline:<3} Tie={ties:<3} "
+            f"{label:<42} RAG={rag:<3} BASELINE={baseline:<3} Tie={ties:<3} "
             f"skipped={skipped:<3} errors={errors:<3}"
         )
+
+    active_rag_only = _active_rag_only_evaluators(suite)
+    if active_rag_only:
+        lines.append("")
+        lines.append(f"{Colors.BOLD}RAG-ONLY DIAGNOSTICS{Colors.RESET}")
+        for evaluator in active_rag_only:
+            row = suite.evaluator_summary.get(evaluator, {})
+            label = EVALUATOR_DISPLAY_NAMES.get(evaluator, evaluator)
+            lines.append(
+                f"{label:<42} completed={row.get('completed', 0):<3} "
+                f"rag_factual={row.get('rag_factual', 0):<3} "
+                f"rag_hallucinated={row.get('rag_hallucinated', 0):<3} "
+                f"skipped={row.get('skipped', 0):<3} errors={row.get('errors', 0):<3}"
+            )
 
     return "\n".join(lines)
 
@@ -82,10 +132,11 @@ def _markdown_head_to_head(suite: SuiteResult) -> str:
         "|---|---:|---:|---:|---:|---:|",
     ]
 
-    for evaluator in EVALUATOR_ORDER:
+    for evaluator in _active_head_to_head_evaluators(suite):
         row = suite.evaluator_summary.get(evaluator, {})
+        label = EVALUATOR_DISPLAY_NAMES.get(evaluator, evaluator)
         lines.append(
-            f"| {evaluator} | {row.get('rag_wins', 0)} | {row.get('baseline_wins', 0)} | "
+            f"| {label} (`{evaluator}`) | {row.get('rag_wins', 0)} | {row.get('baseline_wins', 0)} | "
             f"{row.get('ties', 0)} | {row.get('skipped', 0)} | {row.get('errors', 0)} |"
         )
 
@@ -102,10 +153,11 @@ def _markdown_metric_aggregations(suite: SuiteResult) -> str:
         "|---|---:|---:|---:|---:|",
     ]
 
-    for evaluator in EVALUATOR_ORDER:
+    for evaluator in _active_head_to_head_evaluators(suite):
         row = suite.evaluator_summary.get(evaluator, {})
+        label = EVALUATOR_DISPLAY_NAMES.get(evaluator, evaluator)
         lines.append(
-            f"| {evaluator} | {row.get('rag_factual', 0)} | {row.get('rag_hallucinated', 0)} | "
+            f"| {label} (`{evaluator}`) | {row.get('rag_factual', 0)} | {row.get('rag_hallucinated', 0)} | "
             f"{row.get('baseline_factual', 0)} | {row.get('baseline_hallucinated', 0)} |"
         )
 
@@ -119,16 +171,33 @@ def _markdown_metric_aggregations(suite: SuiteResult) -> str:
         ]
     )
 
-    for evaluator in EVALUATOR_ORDER:
+    for evaluator in _active_head_to_head_evaluators(suite):
         row = suite.evaluator_summary.get(evaluator, {})
-        completed = (
-            row.get("rag_wins", 0)
-            + row.get("baseline_wins", 0)
-            + row.get("ties", 0)
-        )
+        label = EVALUATOR_DISPLAY_NAMES.get(evaluator, evaluator)
+        completed = row.get("completed", 0)
         lines.append(
-            f"| {evaluator} | {completed} | {row.get('skipped', 0)} | {row.get('errors', 0)} |"
+            f"| {label} (`{evaluator}`) | {completed} | {row.get('skipped', 0)} | {row.get('errors', 0)} |"
         )
+
+    active_rag_only = _active_rag_only_evaluators(suite)
+    if active_rag_only:
+        lines.extend(
+            [
+                "",
+                "### RAG-Only Diagnostics",
+                "",
+                "| Evaluator | Completed | RAG Factual | RAG Hallucinated | Skipped | Errors |",
+                "|---|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for evaluator in active_rag_only:
+            row = suite.evaluator_summary.get(evaluator, {})
+            label = EVALUATOR_DISPLAY_NAMES.get(evaluator, evaluator)
+            lines.append(
+                f"| {label} (`{evaluator}`) | {row.get('completed', 0)} | "
+                f"{row.get('rag_factual', 0)} | {row.get('rag_hallucinated', 0)} | "
+                f"{row.get('skipped', 0)} | {row.get('errors', 0)} |"
+            )
 
     return "\n".join(lines)
 
@@ -144,10 +213,11 @@ def _markdown_case_type_aggregations(suite: SuiteResult) -> str:
         lines.append("- None")
         return "\n".join(lines)
 
-    for evaluator in EVALUATOR_ORDER:
+    for evaluator in _active_head_to_head_evaluators(suite) + _active_rag_only_evaluators(suite):
+        display_name = EVALUATOR_DISPLAY_NAMES.get(evaluator, evaluator)
         lines.extend(
             [
-                f"### {evaluator}",
+                f"### {display_name} (`{evaluator}`)",
                 "",
                 "| Case Type | Cases | RAG Wins | BASELINE Wins | Ties | RAG Factual | RAG Hallucinated | BASELINE Factual | BASELINE Hallucinated | Skipped | Errors |",
                 "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
@@ -212,8 +282,9 @@ def _markdown_case_type_aggregations(suite: SuiteResult) -> str:
 
 
 def _markdown_eval_table(suite: SuiteResult, evaluator_name: str) -> str:
+    display_name = EVALUATOR_DISPLAY_NAMES.get(evaluator_name, evaluator_name)
     lines = [
-        f"## {evaluator_name} Results",
+        f"## {display_name} (`{evaluator_name}`) Results",
         "",
         "| # | Case ID | Question | RAG | BASELINE | RAG Score | BASELINE Score | Winner | Status |",
         "|---:|---|---|---|---|---:|---:|---|---|",
@@ -246,7 +317,7 @@ def _markdown_diagnostics(suite: SuiteResult) -> str:
     found = False
 
     for case in suite.cases:
-        for evaluator in EVALUATOR_ORDER:
+        for evaluator in _active_evaluators(suite):
             result = case.evaluations.get(evaluator)
             if result is None:
                 continue
@@ -272,7 +343,7 @@ def generate_markdown_table(suite: SuiteResult) -> str:
         "",
         _markdown_case_type_aggregations(suite),
     ]
-    for evaluator in EVALUATOR_ORDER:
+    for evaluator in _active_head_to_head_evaluators(suite) + _active_rag_only_evaluators(suite):
         sections.append("")
         sections.append(_markdown_eval_table(suite, evaluator))
     sections.append("")
@@ -328,7 +399,7 @@ def _serialize_case(case: CaseResult) -> Dict[str, object]:
         },
         "evaluations": {
             evaluator: _serialize_evaluation(case.evaluations[evaluator])
-            for evaluator in EVALUATOR_ORDER
+            for evaluator in ALL_EVALUATOR_ORDER
             if evaluator in case.evaluations
         },
     }
@@ -347,6 +418,7 @@ def generate_json_payload(suite: SuiteResult) -> Dict[str, object]:
             evaluator: _to_summary_block(summary)
             for evaluator, summary in suite.evaluator_summary.items()
         },
+        "enabled_evaluators": list(_active_evaluators(suite)),
         "cases": [_serialize_case(case) for case in suite.cases],
     }
 
