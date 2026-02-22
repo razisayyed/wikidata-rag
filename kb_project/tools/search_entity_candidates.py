@@ -16,6 +16,7 @@ from ..utils.logging import (
 from ..settings import MAX_SEARCH_RESULTS
 from .tool_protocol_state import register_search_candidates
 from ..wikidata.sparql import run_sparql as _run_sparql
+from ..wikidata.sparql import WikidataServiceError
 
 logger = configure_logging()
 
@@ -291,6 +292,8 @@ LIMIT {limit * 2}
 """
     try:
         results = _run_sparql(query)
+    except WikidataServiceError:
+        raise
     except Exception as exc:
         log_tool("SPARQL Search", f"❌ Error: {exc}", "🔍")
         return []

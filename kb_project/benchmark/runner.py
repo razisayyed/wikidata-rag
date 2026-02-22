@@ -15,6 +15,7 @@ from equivalence_evaluator.utils import factual_judge_adapter
 from ..prompt_only_llm import answer_question_prompt_only, build_prompt_only_agent
 from ..settings import LANGSMITH_TRACE_MODE, OPENAI_JUDGE_MODEL, RAGTRUTH_MODEL
 from ..utils.langsmith import langsmith_tracing, normalize_trace_mode, should_trace_component
+from ..wikidata.sparql import WikidataServiceError
 from ..wikidata_rag_agent import build_agent
 from .aimon import AimonEvaluator
 from .evaluation import evaluate_response
@@ -201,6 +202,13 @@ def _error_result(name: str, reason: str) -> EvaluatorResult:
         winner="N/A",
         notes=reason,
     )
+
+
+def _is_wikidata_unavailable_error(exc: BaseException | str) -> bool:
+    if isinstance(exc, WikidataServiceError):
+        return True
+    text = str(exc)
+    return "WIKIDATA_UNAVAILABLE:" in text
 
 
 def _run_evaluator_tasks_parallel(
@@ -771,6 +779,7 @@ def run_comparison_suite(
     temperature: float = 0.0,
     trace_mode: Optional[str] = None,
     enabled_evaluators: Optional[List[str]] = None,
+    progress_callback: Optional[Callable[[SuiteResult], None]] = None,
     verbose: bool = True,
 ) -> SuiteResult:
     """Run benchmark suite in legacy-simple mode."""
@@ -859,6 +868,14 @@ def run_comparison_suite(
         except Exception as exc:
             rag_error = str(exc)
             rag_output = _to_model_output(response=f"Error: {exc}")
+
+        if rag_error and _is_wikidata_unavailable_error(rag_error):
+            if verbose:
+                print(
+                    f"[benchmark] Skipping {test_case.id}: Wikidata unavailable "
+                    f"({rag_error})"
+                )
+            continue
 
         try:
             with langsmith_tracing(
@@ -962,6 +979,25 @@ def run_comparison_suite(
                 total=len(cases_to_run),
                 enabled_evaluators=active_evaluators,
             )
+
+        if progress_callback is not None:
+            partial_summary = _compute_evaluator_summary(
+                case_results,
+                enabled_evaluators=active_evaluators,
+            )
+            partial_suite = SuiteResult(
+                analysis_version=ANALYSIS_VERSION,
+                threshold=threshold,
+                temperature=temperature,
+                cases=list(case_results),
+                evaluator_summary=partial_summary,
+                enabled_evaluators=list(active_evaluators),
+            )
+            try:
+                progress_callback(partial_suite)
+            except Exception as exc:
+                if verbose:
+                    print(f"[benchmark] progress_callback failed: {exc}")
 
     summary = _compute_evaluator_summary(case_results, enabled_evaluators=active_evaluators)
 

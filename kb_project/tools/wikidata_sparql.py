@@ -16,6 +16,7 @@ from ..utils.logging import (
 from ..settings import DEFAULT_SPARQL_LIMIT
 from .tool_protocol_state import mark_sparql_attempt
 from ..wikidata.sparql import run_sparql as _run_sparql
+from ..wikidata.sparql import WikidataServiceError
 
 logger = configure_logging()
 MAX_SPARQL_ROWS = 100
@@ -90,6 +91,8 @@ def wikidata_sparql(sparql: str, max_rows: int = DEFAULT_SPARQL_LIMIT) -> str:
 
     try:
         results = _run_sparql(sparql)
+    except WikidataServiceError:
+        raise
     except Exception as exc:
         logger.error(f"SPARQL error: {exc}")
         return f"SPARQL error: {exc}"

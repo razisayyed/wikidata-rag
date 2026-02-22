@@ -24,6 +24,7 @@ from ..settings import (
 )
 from .tool_protocol_state import has_sparql_attempt
 from ..wikidata.sparql import run_sparql as _run_sparql
+from ..wikidata.sparql import WikidataServiceError
 
 logger = configure_logging()
 
@@ -102,6 +103,8 @@ LIMIT 1
             url = bindings[0]["article"]["value"]
             title = url.split("/wiki/")[-1]
             return title
+    except WikidataServiceError:
+        raise
     except Exception as e:
         log_tool("Wikipedia", f"❌ Error fetching title for {qid}: {e}", "📖")
     return None

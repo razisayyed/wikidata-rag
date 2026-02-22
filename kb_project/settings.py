@@ -131,9 +131,15 @@ def resolve_device(device_preference: str = "auto") -> str:
 # ==========================================================================
 
 WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql"
-WIKIDATA_USER_AGENT = "WikidataLangChainAgent/1.0 (research-demo)"
+WIKIDATA_USER_AGENT = (
+    "Wikidata-RAG-Hallucination-Benchmark/1.0 "
+    "(benchmarking RAG retrieval faithfulness and hallucination detection; contact: razi@najah.edu)"
+)
 
-WIKIPEDIA_USER_AGENT = "WikidataLangChainAgent/1.0 (research-demo)"
+WIKIPEDIA_USER_AGENT = (
+    "Wikidata-RAG-Hallucination-Benchmark/1.0 "
+    "(benchmarking RAG retrieval faithfulness and hallucination detection; contact: razi@najah.edu)"
+)
 WIKIPEDIA_API_URL = "https://en.wikipedia.org/api/rest_v1/page/html/"
 
 MAX_SEARCH_RESULTS = 10  # Max candidates to return for LLM selection

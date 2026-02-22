@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from ..settings import RAG_RECURSION_LIMIT, VECTARA_DEVICE, resolve_device
 from ..tools.tool_protocol_state import reset_tool_protocol_state, set_question_context
 from ..utils.messages import content_to_text
+from ..wikidata.sparql import WikidataServiceError
 from ..wikidata_rag_agent import build_agent, finalize_agent_answer, is_process_message
 from .models import TestCase
 
@@ -206,6 +207,8 @@ def run_agent_with_capture(question: str, agent=None, verbose: bool = True) -> A
                         continue
 
                     matched_call.output = content_to_text(msg.content)
+                    if "WIKIDATA_UNAVAILABLE:" in (matched_call.output or ""):
+                        raise WikidataServiceError(matched_call.output)
                     run.tool_calls.append(matched_call)
                     if verbose:
                         print(
@@ -489,7 +492,7 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
     _case(
         "multi_hop_008",
         "What capital is associated with the author's country in Don Quixote?",
-        "Don Quixote was authored by Miguel de Cervantes. Miguel de Cervantes has country of citizenship Crown of Castile. The capital of Crown of Castile is Madrid.",
+        "Don Quixote was authored by Miguel de Cervantes. Miguel de Cervantes has country of citizenship Crown of Castile. The capital of Crown of Castile is Madrid and/or Valladolid.",
         "multi_hop",
         accepted_aliases=[["Madrid"]],
     ),
@@ -573,7 +576,7 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
     ),
     _case(
         "multi_hop_013",
-        "The birthplace of George Washington is in which country's capital city?",
+        "What is the capital of the country where the birthplace of George Washington is located?",
         "George Washington was born in Westmoreland County. Westmoreland County is in United States. The capital of United States is Washington, D.C..",
         "multi_hop",
         accepted_aliases=[
@@ -594,14 +597,14 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
     _case(
         "multi_hop_014",
         "For Don Quixote, what is the capital of its author's citizenship country?",
-        "Don Quixote was authored by Miguel de Cervantes. Miguel de Cervantes has country of citizenship Crown of Castile. The capital of Crown of Castile is Valladolid.",
+        "Don Quixote was authored by Miguel de Cervantes. Miguel de Cervantes has country of citizenship Crown of Castile. The capital of Crown of Castile is Madrid and/or Valladolid.",
         "multi_hop",
         accepted_aliases=[["Valladolid", "Pucela"]],
     ),
     _case(
         "multi_hop_015",
         "What is the capital of the country where the founder of Meta was born?",
-        "Meta was founded by Dustin Moskovitz. Dustin Moskovitz was born in Gainesville. Gainesville is in United States. The capital of United States is Washington, D.C..",
+        "Meta was founded by Mark Zuckerberg. Mark Zuckerberg was born in White Plains. White Plains is in United States. The capital of United States is Washington, D.C..",
         "multi_hop",
         accepted_aliases=[
             [

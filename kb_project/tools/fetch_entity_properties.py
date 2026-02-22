@@ -20,6 +20,7 @@ from .tool_protocol_state import (
 )
 from ..wikidata.properties import WIKIDATA_PROPERTIES
 from ..wikidata.sparql import run_sparql as _run_sparql
+from ..wikidata.sparql import WikidataServiceError
 
 logger = configure_logging()
 _PROPERTY_ID_PATTERN = re.compile(r"^P\d+$")
@@ -418,6 +419,8 @@ def fetch_entity_properties(
 
         return formatted_results
 
+    except WikidataServiceError:
+        raise
     except Exception as e:
         return f"Error fetching properties for {qid}: {e}"
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List
 
 from .evaluator_registry import (
@@ -427,10 +428,110 @@ def save_benchmark_report(
     suite: SuiteResult,
     json_path: str = "benchmark_results.json",
     md_path: str = "benchmark_report.md",
+    append: bool = False,
+    metadata: Dict[str, object] | None = None,
 ) -> None:
     """Save benchmark results to JSON and Markdown files."""
+    payload = generate_json_payload(suite)
+
+    if append:
+        _append_json_report(payload, json_path=json_path, metadata=metadata)
+        _append_markdown_report(suite, md_path=md_path, metadata=metadata)
+        return
+
     with open(json_path, "w", encoding="utf-8") as json_file:
-        json.dump(generate_json_payload(suite), json_file, indent=2)
+        json.dump(payload, json_file, indent=2)
 
     with open(md_path, "w", encoding="utf-8") as md_file:
         md_file.write(generate_full_report(suite))
+
+
+def _append_json_report(
+    payload: Dict[str, object],
+    json_path: str,
+    metadata: Dict[str, object] | None = None,
+) -> None:
+    path = Path(json_path)
+    entry = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "metadata": metadata or {},
+        "payload": payload,
+    }
+
+    if not path.exists():
+        history_doc = {
+            "format": "benchmark-report-history-v1",
+            "entry_count": 1,
+            "latest": payload,
+            "entries": [entry],
+        }
+        path.write_text(json.dumps(history_doc, indent=2), encoding="utf-8")
+        return
+
+    try:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        existing = None
+
+    if isinstance(existing, dict) and isinstance(existing.get("entries"), list):
+        history_doc = existing
+    elif isinstance(existing, dict):
+        history_doc = {
+            "format": "benchmark-report-history-v1",
+            "entry_count": 0,
+            "latest": existing,
+            "entries": [
+                {
+                    "timestamp": datetime.now().isoformat(timespec="seconds"),
+                    "metadata": {"migrated_from_single_report": True},
+                    "payload": existing,
+                }
+            ],
+        }
+    else:
+        history_doc = {
+            "format": "benchmark-report-history-v1",
+            "entry_count": 0,
+            "latest": {},
+            "entries": [],
+        }
+
+    history_doc.setdefault("entries", [])
+    history_doc["entries"].append(entry)
+    history_doc["entry_count"] = len(history_doc["entries"])
+    history_doc["latest"] = payload
+    path.write_text(json.dumps(history_doc, indent=2), encoding="utf-8")
+
+
+def _append_markdown_report(
+    suite: SuiteResult,
+    md_path: str,
+    metadata: Dict[str, object] | None = None,
+) -> None:
+    path = Path(md_path)
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    meta = metadata or {}
+    header_lines = [
+        "",
+        "",
+        "---",
+        "",
+        f"# Benchmark Report Snapshot ({timestamp})",
+    ]
+    if meta:
+        header_lines.append("")
+        header_lines.append("## Snapshot Metadata")
+        header_lines.append("")
+        for key in sorted(meta):
+            header_lines.append(f"- {key}: `{meta[key]}`")
+    header_lines.append("")
+    header_lines.append(generate_full_report(suite))
+    block = "\n".join(header_lines)
+
+    if not path.exists():
+        content = block.lstrip("\n")
+        path.write_text(content, encoding="utf-8")
+        return
+
+    with open(path, "a", encoding="utf-8") as md_file:
+        md_file.write(block)
