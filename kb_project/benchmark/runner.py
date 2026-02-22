@@ -799,11 +799,22 @@ def run_comparison_suite(
     baseline_agent = build_prompt_only_agent(temperature=temperature)
 
     ragtruth_evaluator: Optional[RAGTruthEvaluator] = None
-    if {"ragtruth", "rag_retrieval_faithfulness"} & active_evaluator_set:
+    if "ragtruth" in active_evaluator_set:
         try:
             ragtruth_evaluator = RAGTruthEvaluator(model_name=RAGTRUTH_MODEL, strict_mode=False)
         except Exception:
             ragtruth_evaluator = None
+
+    ragtrace_faithfulness_evaluator: Optional[RAGTruthEvaluator] = None
+    if "rag_retrieval_faithfulness" in active_evaluator_set:
+        try:
+            ragtrace_faithfulness_evaluator = RAGTruthEvaluator(
+                model_name=OPENAI_JUDGE_MODEL,
+                strict_mode=False,
+                provider="openai",
+            )
+        except Exception:
+            ragtrace_faithfulness_evaluator = None
 
     aimon_evaluator: Optional[AimonEvaluator] = None
     if "aimon" in active_evaluator_set:
@@ -925,7 +936,7 @@ def run_comparison_suite(
                         _evaluate_rag_retrieval_faithfulness,
                         rag_output=rag_output,
                         test_case=test_case,
-                        ragtruth_evaluator=ragtruth_evaluator,
+                        ragtruth_evaluator=ragtrace_faithfulness_evaluator,
                     )
                 evals = _run_evaluator_tasks_parallel(evaluator_tasks)
             for evaluator_name, evaluator_result in list(evals.items()):

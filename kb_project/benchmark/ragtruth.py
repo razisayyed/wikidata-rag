@@ -24,6 +24,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..settings import RAGTRUTH_MODEL, get_ollama_connection_kwargs
 from ..utils.imports import ChatOllama
+
+try:
+    from langchain_openai import ChatOpenAI
+except Exception:  # pragma: no cover - optional dependency
+    ChatOpenAI = None  # type: ignore[assignment]
 from .evaluation import build_primary_context
 
 # ==========================================================================
@@ -319,6 +324,7 @@ class RAGTruthEvaluator:
         model_name: str = RAGTRUTH_MODEL,
         temperature: float = 0.1,
         strict_mode: bool = True,
+        provider: str = "ollama",
     ):
         """
         Initialize the RAGTruth evaluator.
@@ -327,22 +333,33 @@ class RAGTruthEvaluator:
             model_name: Ollama model to use for evaluation
             temperature: LLM temperature (lower = more deterministic)
             strict_mode: If True, use stricter hallucination detection
+            provider: "ollama" (default) or "openai"
         """
         self.model_name = model_name
         self.temperature = temperature
         self.strict_mode = strict_mode
+        self.provider = (provider or "ollama").strip().lower()
 
-        if not ChatOllama:
-            raise ImportError(
-                "ChatOllama is not available. Install langchain-ollama (or compatible langchain-community backend)."
+        if self.provider == "openai":
+            if not ChatOpenAI:
+                raise ImportError(
+                    "ChatOpenAI is not available. Install langchain-openai for OpenAI-backed RAGTruth evaluation."
+                )
+            self.llm = ChatOpenAI(
+                model=model_name,
+                temperature=temperature,
             )
-
-        self.llm = ChatOllama(
-            model=model_name,
-            temperature=temperature,
-            name="RAGTruth-Evaluator",
-            **get_ollama_connection_kwargs(),
-        )
+        else:
+            if not ChatOllama:
+                raise ImportError(
+                    "ChatOllama is not available. Install langchain-ollama (or compatible langchain-community backend)."
+                )
+            self.llm = ChatOllama(
+                model=model_name,
+                temperature=temperature,
+                name="RAGTruth-Evaluator",
+                **get_ollama_connection_kwargs(),
+            )
 
     def _parse_json_response(self, raw_output: str) -> Tuple[Dict[str, Any], str]:
         """
@@ -461,6 +478,7 @@ class RAGTruthEvaluator:
         if verbose:
             print("\n[RAGTruth] Evaluating response...")
             print(f"[RAGTruth] Using model: {self.model_name}")
+            print(f"[RAGTruth] Provider: {self.provider}")
             print(f"[RAGTruth] Strict mode: {self.strict_mode}")
             print(f"[RAGTruth] Eval context mode: {eval_context_mode}")
 
