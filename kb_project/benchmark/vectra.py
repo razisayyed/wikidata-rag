@@ -1421,7 +1421,7 @@ GROUND_TRUTH_TEST_CASES: List[TestCase] = [
     ),
     _case(
         "multi_hop_056",
-        "The birthplace of Alan Turing is in which country's capital city?",
+        "What is the capital of the country where the birthplace of Alan Turing is located?",
         "Alan Turing was born in Maida Vale. Maida Vale is in United Kingdom. The capital of United Kingdom is London.",
         "multi_hop",
         accepted_aliases=[
